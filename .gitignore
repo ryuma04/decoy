@@ -1,0 +1,27 @@
+# reference repos live outside this repo (../references) and must never be committed
+references/
+../references/
+
+# secrets
+.env
+*.pem
+*.key
+
+# go
+backend/go/bin/
+backend/go/seed/out/
+
+# node
+frontend/nextjs/node_modules/
+frontend/nextjs/.next/
+
+# python
+ai-service/fastapi/.venv/
+__pycache__/
+*.pyc
+ai-service/fastapi/data/raw/*
+!ai-service/fastapi/data/raw/LICENSES.md
+
+# runtime
+quarantine/
+*.log

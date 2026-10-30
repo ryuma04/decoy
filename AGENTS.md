@@ -1,47 +1,51 @@
-## Reference Repository Policy
+# AGENTS.md — Next.js SOC dashboard (for Antigravity)
 
-The `references/` directory contains five cloned open-source repositories:
+You are building the analyst dashboard of the Deception SOC. Root rules: `../../../AGENTS.md`.
+In Antigravity, add this file (and `../../docs/11-frontend-spec.md`) to the workspace rules / context.
 
-1. Cowrie
-2. Wisp
-3. EchidraOSS
-4. HoneyWire
-5. LABYRINTH
+## Read before coding
 
-These repositories are strictly for research and technical reference.
+1. `../../docs/00-overview.md` — what the product is.
+2. `../../docs/04-api-contract.md` §B — every endpoint, SSE message and the TypeScript types. **This is your only
+   interface to the backend.** Copy the types verbatim into `src/lib/types.ts`.
+3. `../../docs/11-frontend-spec.md` — pages, components, behaviour, build order.
 
-### Strict Rules
+## Rules
 
-- DO NOT use any reference repository as the project's base.
-- DO NOT fork or modify the reference repositories.
-- DO NOT copy or vendor their source code into the main project.
-- DO NOT import their modules or dependencies as implementation shortcuts.
-- DO NOT reproduce their existing dashboards.
-- DO NOT execute their deployment stacks as part of the product.
+- Next.js 15 App Router + TypeScript strict + Tailwind + shadcn/ui + Recharts + `@xyflow/react`. Nothing else
+  without asking.
+- Browser calls only `/api/...`; `next.config.ts` rewrites to `${CORE_API_URL}/v1/...`. Never call decoys,
+  Postgres or the ML service.
+- Start with `NEXT_PUBLIC_USE_MOCKS=1`: build fixtures in `src/mocks/` from the examples in 04 (create realistic
+  data: one critical actor ACT-0007 with 4 sessions across web/ssh/k8s/beacon, two low actors, 3 incidents).
+- If the real API differs from 04, do not patch around it silently: report the mismatch so 04 is fixed first.
+- Do not copy or recreate the dashboards of any repo in `references/`.
+- Wording: correlation is "likely same operator", behaviour classes describe behaviour, never identity.
+- Response actions show a confirm dialog: "Lab environment only".
+- Accessible: severity always has a text label, not colour alone; keyboard-navigable tables and dialogs.
 
-### Expected Usage
+## Structure
 
-Study their:
-- System architecture and design decisions.
-- Honeypot and decoy implementation logic.
-- Honeytoken generation and triggering mechanisms.
-- Event schemas and logging mechanisms.
-- Session tracking and behavioural fingerprinting.
-- Threat classification and detection rules.
-- MITRE ATT&CK mapping.
-- Distributed sensor communication.
-- Adaptive deception and AI-agent interaction techniques.
+```text
+src/app/(auth)/login/page.tsx
+src/app/(soc)/layout.tsx                 sidebar + topbar + StreamProvider
+src/app/(soc)/page.tsx                   overview
+src/app/(soc)/events/page.tsx
+src/app/(soc)/actors/page.tsx
+src/app/(soc)/actors/[id]/page.tsx
+src/app/(soc)/incidents/page.tsx
+src/app/(soc)/incidents/[id]/page.tsx
+src/app/(soc)/maze/page.tsx
+src/app/(soc)/honeytokens/page.tsx
+src/app/(soc)/sensors/page.tsx
+src/components/…                         SeverityPill, RiskGauge, BehaviourBadge, ServiceIcon, Timeline,
+                                         SessionGraph, MazeGraph, AttackMatrix, EventDrawer, KpiCard
+src/lib/types.ts  api.ts  stream.tsx  format.ts (IST time helpers)
+src/mocks/*.json  stream.json
+middleware.ts                            redirect to /login when no session cookie
+```
 
-Use these findings to independently design and implement our own system.
+## Done means
 
-All actual product code must reside inside `deception-soc/`.
-
-The final implementation must use:
-- Next.js for frontend.
-- Go for the main backend and intelligence engine.
-- PostgreSQL for storage.
-- FastAPI for optional AI/ML services.
-
-Document architectural decisions and independently developed implementations.
-
-Preserve the separation between reference material and original project code. Review applicable licenses before incorporating any third-party code or substantial code-derived material.
+Every page in 11 renders with mocks and with the real backend; `npm run build`, `npm run lint`, type-check and the
+Playwright smoke test pass; the actor profile reads clearly on a 1280×720 projector.
