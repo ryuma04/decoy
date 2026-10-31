@@ -156,6 +156,14 @@ requests (contact messages with `--`, `;`, quotes, `#1234`, emoji, an address, a
 proxy, each as a fresh visitor, and checks core for `session.diverted`. Expected: `20 passed, 0 failed` (input-risk
 model v2; v1 failed 2 harmless messages).
 
+## Clean slate before a demo
+`scripts/reset-demo.sh` is a dry run: it lists how many rows each table holds and changes nothing.
+`scripts/reset-demo.sh -yes` deletes all recorded activity (events, sessions, actors, findings, token hits, incidents,
+maze state, tactics, narrations, policy rows such as blocks / diversions / releases), restarts actor labels at
+ACT-0001, reactivates burned honeytokens and clears the lab shop's login lockouts. It keeps users, sensors,
+honeytokens (so planted lures stay valid), allowlist and scorer weights. There is no undo. Restart the stack afterwards
+(`scripts/dev-down.sh && scripts/aetees-lab.sh && scripts/dev-up.sh`) so core and the proxy forget in-memory state.
+
 ## If something looks wrong
 - Nothing on the dashboard: check `.logs/core.log` and the decoy log in `.logs/`; `scripts/dev-down.sh` then
   `scripts/dev-up.sh`.

@@ -26,6 +26,7 @@ scripts/dev-up.sh          # ML :8000, core :8443/:8090, all decoys, dashboard :
 scripts/aetees-lab.sh      # optional: Aetees real shop :3100 + honeypot clone :3101 (needs ../references/aetee)
 scripts/attack.sh          # optional: scripted demo attack against the lab decoys
 scripts/dev-down.sh        # stop everything
+scripts/reset-demo.sh      # dry run of wiping recorded activity; add -yes for a clean demo database
 ```
 
 Dashboard: http://localhost:3000 — `SOC_ADMIN_EMAIL` / `SOC_ADMIN_PASSWORD` from `.env`.
