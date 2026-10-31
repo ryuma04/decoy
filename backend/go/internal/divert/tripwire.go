@@ -2,13 +2,16 @@ package divert
 
 import (
 	"bytes"
+	"context"
 	"io"
 	"net/http"
 	"net/url"
 	"regexp"
 	"strings"
+	"time"
 
 	"github.com/ryuma04/decoy/backend/internal/decoy/web"
+	"github.com/ryuma04/decoy/backend/internal/mlclient"
 )
 
 var (
@@ -27,14 +30,20 @@ var (
 		"python-requests", "curl/", "wget/", "go-http-client/", "aiohttp", "httpie",
 	}
 
-	oddSearchRegex = regexp.MustCompile(`[~^\{\}\[\]\$]`)
+	oddSearchRegex = regexp.MustCompile(`[~^\{\}\[\]\$` + "`" + `]|(^'|'$|'\s|\s'|""|\")`)
 )
 
 // Tripwire satisfies the divert.Classifier interface (docs/18 Task 10).
-type Tripwire struct{}
+type Tripwire struct {
+	ml *mlclient.Client
+}
 
-func NewTripwire() *Tripwire {
-	return &Tripwire{}
+func NewTripwire(ml ...*mlclient.Client) *Tripwire {
+	var c *mlclient.Client
+	if len(ml) > 0 {
+		c = ml[0]
+	}
+	return &Tripwire{ml: c}
 }
 
 // Classify inspects request attributes and visitor history.
@@ -42,7 +51,18 @@ func (tw *Tripwire) Classify(r *http.Request, body []byte, v VisitorView) Trip {
 	path := strings.ToLower(r.URL.Path)
 	ua := strings.ToLower(r.UserAgent())
 
-	// 1. Hard check: files Next.js never serves
+	// 1. Hard check: path traversal in URL path
+	if strings.Contains(r.URL.Path, "..") || strings.Contains(r.URL.RawPath, "..") {
+		return Trip{
+			Sev:    SevHard,
+			Reason: "path traversal in URL path",
+			Label:  "path_traversal",
+			Param:  "path",
+			Value:  r.URL.Path,
+		}
+	}
+
+	// 2. Hard check: files Next.js never serves
 	for _, sp := range sensitivePaths {
 		if strings.HasPrefix(path, sp) || strings.Contains(path, sp) {
 			return Trip{
@@ -142,11 +162,23 @@ func (tw *Tripwire) Classify(r *http.Request, body []byte, v VisitorView) Trip {
 }
 
 func (tw *Tripwire) checkInjections(r *http.Request, body []byte) (Trip, bool) {
-	// Check query string
+	path := r.URL.Path
+
+	// 1. Check path traversal in URL path
+	if strings.Contains(r.URL.Path, "..") || strings.Contains(r.URL.RawPath, "..") {
+		return Trip{
+			Sev:    SevHard,
+			Reason: "path traversal in URL path",
+			Label:  "path_traversal",
+			Param:  "path",
+			Value:  r.URL.Path,
+		}, true
+	}
+
+	// 2. Check query string
 	for k, vv := range r.URL.Query() {
 		for _, v := range vv {
-			if res := web.CheckInput(v); res.IsSuspicious {
-				label := classifyPrecheck(res)
+			if label, ok := tw.classifyValue(k, v, path, "query"); ok {
 				return Trip{
 					Sev:    SevHard,
 					Reason: "injection payload in query: " + k,
@@ -158,25 +190,13 @@ func (tw *Tripwire) checkInjections(r *http.Request, body []byte) (Trip, bool) {
 		}
 	}
 
-	// Check path traversal
-	if strings.Contains(r.URL.Path, "..") || strings.Contains(r.URL.RawPath, "..") {
-		return Trip{
-			Sev:    SevHard,
-			Reason: "path traversal in URL path",
-			Label:  "path_traversal",
-			Param:  "path",
-			Value:  r.URL.Path,
-		}, true
-	}
-
-	// Check body for URL-encoded or form payloads
+	// 3. Check body for URL-encoded, form, or raw payloads
 	if len(body) > 0 && len(body) <= 65536 {
 		bodyStr := string(body)
 		if vals, err := url.ParseQuery(bodyStr); err == nil && len(vals) > 0 {
 			for k, vv := range vals {
 				for _, v := range vv {
-					if res := web.CheckInput(v); res.IsSuspicious {
-						label := classifyPrecheck(res)
+					if label, ok := tw.classifyValue(k, v, path, "form"); ok {
 						return Trip{
 							Sev:    SevHard,
 							Reason: "injection payload in body param: " + k,
@@ -188,15 +208,14 @@ func (tw *Tripwire) checkInjections(r *http.Request, body []byte) (Trip, bool) {
 				}
 			}
 		} else {
-			// Direct check on body text
-			if res := web.CheckInput(bodyStr); res.IsSuspicious {
-				label := classifyPrecheck(res)
+			// Direct check on body text (JSON or raw)
+			if label, ok := tw.classifyValue("body", bodyStr, path, "body"); ok {
 				return Trip{
 					Sev:    SevHard,
 					Reason: "injection payload in request body",
 					Label:  label,
 					Param:  "body",
-					Value:  res.Payload,
+					Value:  bodyStr,
 				}, true
 			}
 		}
@@ -205,18 +224,62 @@ func (tw *Tripwire) checkInjections(r *http.Request, body []byte) (Trip, bool) {
 	return Trip{}, false
 }
 
-func classifyPrecheck(res web.PrecheckResult) string {
-	p := strings.ToLower(res.Payload)
-	s := strings.ToLower(res.Separator)
-	combined := p + " " + s
+func (tw *Tripwire) classifyValue(param, val, path, field string) (string, bool) {
+	// First check explicit path traversal
+	if strings.Contains(val, "../") || strings.Contains(val, "..\\") {
+		return "path_traversal", true
+	}
 
-	if strings.Contains(combined, "' or") || strings.Contains(combined, "union select") || strings.Contains(combined, "--") {
+	res := web.CheckInput(val)
+	// ONLY values that match an actual exploitation separator trigger the pre-check!
+	if !res.IsSuspicious || res.Separator == "" {
+		return "", false
+	}
+
+	// If ML service is configured, query it
+	if tw.ml != nil && tw.ml.Enabled() {
+		ctx, cancel := context.WithTimeout(context.Background(), 300*time.Millisecond)
+		defer cancel()
+		mlRes, err := tw.ml.ClassifyInput(ctx, param, val, "web", path, field)
+		if err == nil {
+			if mlRes.Label != "normal" && mlRes.Label != "" {
+				return mlRes.Label, true
+			}
+			if mlRes.Risk < 0.2 {
+				return "", false
+			}
+		}
+	}
+
+	// Fallback to pre-check alone
+	label := classifyPrecheck(res)
+	return label, true
+}
+
+func classifyPrecheck(res web.PrecheckResult) string {
+	s := strings.ToLower(res.Separator)
+	p := strings.ToLower(res.Payload)
+
+	// Check separator type
+	switch s {
+	case "' or", "union select", "--":
+		return "sqli"
+	case "<script":
+		return "xss"
+	case "../":
+		return "path_traversal"
+	case ";", "&&", "||", "|", "`", "$(", "%0a", "\n":
+		return "cmd_injection"
+	}
+
+	// Fallback on payload
+	if strings.Contains(p, "union select") || strings.Contains(p, "' or") || strings.Contains(p, "--") {
 		return "sqli"
 	}
-	if strings.Contains(combined, "<script") || strings.Contains(combined, "javascript:") || strings.Contains(combined, "onerror") {
+	if strings.Contains(p, "<script") || strings.Contains(p, "javascript:") || strings.Contains(p, "onerror") {
 		return "xss"
 	}
-	if strings.Contains(combined, "..") || strings.Contains(combined, "/etc/") {
+	if strings.Contains(p, "../") || strings.Contains(p, "..\\") {
 		return "path_traversal"
 	}
 	return "cmd_injection"
