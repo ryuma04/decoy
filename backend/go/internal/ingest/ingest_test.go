@@ -37,7 +37,10 @@ func (f *fakeStore) IngestBatch(_ context.Context, sensorID string, envs []event
 	return res, nil
 }
 
-func (f *fakeStore) Heartbeat(context.Context, string, string, string) error { f.heartbeats++; return nil }
+func (f *fakeStore) Heartbeat(context.Context, string, string, string) error {
+	f.heartbeats++
+	return nil
+}
 func (f *fakeStore) Policy(context.Context) (store.Policy, error) {
 	return store.Policy{BlockedIPs: []string{"10.66.0.23"}, KilledSessions: []string{}, BurnedTokens: []string{}, Rev: 1}, nil
 }

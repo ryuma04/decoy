@@ -1,0 +1,32 @@
+# Common default / dictionary username:password pairs. Too common to link two sessions to one operator
+# (07 §1 cred_pair). Short list; extend from a licensed wordlist if needed.
+root:root
+root:toor
+root:admin
+root:password
+root:123456
+root:12345678
+root:1234
+root:12345
+root:
+admin:admin
+admin:password
+admin:123456
+admin:1234
+admin:12345
+admin:admin123
+admin:
+user:user
+user:password
+test:test
+test:123456
+guest:guest
+ubuntu:ubuntu
+pi:raspberry
+oracle:oracle
+postgres:postgres
+mysql:mysql
+support:support
+default:default
+ftp:ftp
+administrator:password

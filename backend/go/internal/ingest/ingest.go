@@ -32,6 +32,13 @@ type Server struct {
 	Bus   bus.Bus
 	Keys  map[string]string
 	Now   func() time.Time
+	// Maze answers maze-view; nil = static default view.
+	Maze MazeViewer
+}
+
+// MazeViewer builds the per-session decoy view (08).
+type MazeViewer interface {
+	View(ctx context.Context, sensorSessionID, service string) (map[string]any, error)
 }
 
 type rejected struct {
@@ -171,9 +178,16 @@ func (s *Server) policy(w http.ResponseWriter, r *http.Request, _ string, _ []by
 
 // mazeView returns the default view until the maze controller exists (M2 step 8 / M5).
 func (s *Server) mazeView(w http.ResponseWriter, r *http.Request, _ string, _ []byte) {
-	if r.URL.Query().Get("sensor_session_id") == "" {
+	sid := r.URL.Query().Get("sensor_session_id")
+	if sid == "" {
 		writeError(w, http.StatusBadRequest, "bad_request", "sensor_session_id is required")
 		return
+	}
+	if s.Maze != nil {
+		if v, err := s.Maze.View(r.Context(), sid, ServiceFromID(strings.SplitN(sid, ":", 2)[0])); err == nil {
+			writeJSON(w, http.StatusOK, v)
+			return
+		}
 	}
 	writeJSON(w, http.StatusOK, map[string]any{
 		"actor_id": nil, "visible_nodes": []string{"web_entry", "lure_backup", "ssh_entry", "lure_aws"},

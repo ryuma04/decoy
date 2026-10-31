@@ -10,6 +10,9 @@ import (
 	"time"
 
 	"github.com/ryuma04/decoy/backend/internal/bus"
+	"github.com/ryuma04/decoy/backend/internal/maze"
+	"github.com/ryuma04/decoy/backend/internal/mlclient"
+	"github.com/ryuma04/decoy/backend/internal/narrate"
 	"github.com/ryuma04/decoy/backend/internal/store"
 )
 
@@ -28,6 +31,14 @@ type Server struct {
 	Auth    *Auth
 	Hub     *Hub
 	limiter loginLimiter
+
+	// Intel endpoints (actors.go, incidents.go). Nil DB: those routes are not registered.
+	DB           *store.Store
+	ML           *mlclient.Client
+	Narrator     *narrate.Narrator
+	DashboardURL string
+	ScorerLearn  bool
+	MazeGraph    *maze.Graph
 }
 
 // Routes registers every analyst endpoint on mux.
@@ -39,6 +50,10 @@ func (s *Server) Routes(mux *http.ServeMux) {
 	mux.HandleFunc("GET /v1/events", authed(s.listEvents))
 	mux.HandleFunc("GET /v1/events/{event_id}", authed(s.getEvent))
 	mux.HandleFunc("GET /v1/stream", authed(s.Hub.ServeHTTP))
+	if s.DB != nil {
+		s.DBRoutes(mux)
+		s.IncidentRoutes(mux)
+	}
 	mux.HandleFunc("GET /healthz", func(w http.ResponseWriter, _ *http.Request) { writeJSON(w, 200, map[string]bool{"ok": true}) })
 }
 

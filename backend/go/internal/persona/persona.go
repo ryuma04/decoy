@@ -21,8 +21,8 @@ type User struct {
 
 type Persona struct {
 	Seed           string `json:"seed"`
-	Company        string `json:"company"`  // "Northwind Logistics"
-	Domain         string `json:"domain"`   // "northwind-logistics.internal"
+	Company        string `json:"company"` // "Northwind Logistics"
+	Domain         string `json:"domain"`  // "northwind-logistics.internal"
 	HostPrefix     string `json:"host_prefix"`
 	Hostname       string `json:"hostname"` // "nwl-app-01"
 	Users          []User `json:"users"`

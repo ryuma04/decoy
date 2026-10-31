@@ -1,0 +1,44 @@
+@import "tailwindcss";
+
+/* Tokens from DESIGN.md (Geist system): one ink tone on a near-white canvas, 1px hairlines, colour only for
+   semantic states. Severity colours are always paired with a text label (11 §Layout). */
+@theme {
+  --color-ink: #171717;
+  --color-body: #4d4d4d;
+  --color-mute: #8f8f8f;
+  --color-faint: #a1a1a1;
+  --color-hairline: #ebebeb;
+  --color-hairline-soft: #f2f2f2;
+  --color-canvas: #fafafa;
+  --color-elevated: #ffffff;
+  --color-link: #0070f3;
+  --color-link-soft: #d3e5ff;
+  --color-error: #ee0000;
+  --color-error-soft: #ffe5e5;
+  --color-warning: #f5a623;
+  --color-warning-soft: #ffefcf;
+  --color-warning-deep: #ab570a;
+  --color-violet: #7928ca;
+
+  --font-sans: var(--font-geist-sans), Inter, Arial, sans-serif;
+  --font-mono: var(--font-geist-mono), "JetBrains Mono", ui-monospace, monospace;
+
+  --radius-sm: 6px;
+  --radius-md: 12px;
+  --radius-lg: 16px;
+}
+
+html, body { background: var(--color-canvas); color: var(--color-ink); }
+body { font-family: var(--font-sans); font-size: 14px; line-height: 20px; -webkit-font-smoothing: antialiased; }
+
+.eyebrow { font-family: var(--font-mono); font-size: 12px; line-height: 16px; font-weight: 500;
+  text-transform: uppercase; color: var(--color-mute); letter-spacing: 0; }
+.card { background: var(--color-elevated); border: 1px solid var(--color-hairline); border-radius: var(--radius-md); }
+.btn { display: inline-flex; align-items: center; gap: 6px; height: 32px; padding: 0 10px; border-radius: var(--radius-sm);
+  font-weight: 500; font-size: 14px; border: 1px solid var(--color-hairline); background: var(--color-elevated); color: var(--color-ink); }
+.btn:hover { background: var(--color-hairline-soft); }
+.btn-primary { background: var(--color-ink); color: #fff; border-color: var(--color-ink); }
+.btn-primary:hover { background: #333; }
+.input { height: 36px; width: 100%; padding: 0 12px; border-radius: var(--radius-sm); border: 1px solid var(--color-hairline);
+  background: var(--color-elevated); color: var(--color-ink); }
+.input:focus, .btn:focus-visible { outline: 2px solid var(--color-link); outline-offset: 1px; }

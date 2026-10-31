@@ -15,8 +15,8 @@ func valid() Envelope {
 		Sensor:  Sensor{ID: "ssh-01", Service: "ssh", MazeNode: "ssh_entry"},
 		Session: SessionRef{SensorSessionID: "ssh-01:7f3a9c", Seq: 14},
 		Src:     Endpoint{IP: "10.66.0.23", Port: 51544}, Dst: Dst{Port: 2222},
-		Type:    "shell.command",
-		Data:    json.RawMessage(`{"raw":"cat /home/deploy/.aws/credentials","argv0":"cat"}`),
+		Type: "shell.command",
+		Data: json.RawMessage(`{"raw":"cat /home/deploy/.aws/credentials","argv0":"cat"}`),
 	}
 }
 

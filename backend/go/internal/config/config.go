@@ -20,6 +20,8 @@ type Core struct {
 	AdminEmail    string
 	AdminPassword string
 	MLURL         string
+	RulesPath     string
+	MazePath      string
 	DiscordURL    string
 	SlackURL      string
 	DashboardURL  string
@@ -42,6 +44,8 @@ func LoadCore() (Core, error) {
 		AdminEmail:    os.Getenv("SOC_ADMIN_EMAIL"),
 		AdminPassword: os.Getenv("SOC_ADMIN_PASSWORD"),
 		MLURL:         strings.TrimRight(os.Getenv("ML_URL"), "/"),
+		RulesPath:     env("RULES_PATH", "rules/rules.yaml"),
+		MazePath:      env("MAZE_PATH", "maze/maze.yaml"),
 		DiscordURL:    os.Getenv("DISCORD_WEBHOOK_URL"),
 		SlackURL:      os.Getenv("SLACK_WEBHOOK_URL"),
 		DashboardURL:  strings.TrimRight(env("DASHBOARD_URL", "http://localhost:3000"), "/"),

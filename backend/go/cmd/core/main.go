@@ -19,7 +19,13 @@ import (
 	"github.com/ryuma04/decoy/backend/internal/api"
 	"github.com/ryuma04/decoy/backend/internal/bus"
 	"github.com/ryuma04/decoy/backend/internal/config"
+	"github.com/ryuma04/decoy/backend/internal/incident"
 	"github.com/ryuma04/decoy/backend/internal/ingest"
+	"github.com/ryuma04/decoy/backend/internal/intel/engine"
+	"github.com/ryuma04/decoy/backend/internal/intel/rules"
+	"github.com/ryuma04/decoy/backend/internal/maze"
+	"github.com/ryuma04/decoy/backend/internal/mlclient"
+	"github.com/ryuma04/decoy/backend/internal/narrate"
 	"github.com/ryuma04/decoy/backend/internal/store"
 )
 
@@ -27,6 +33,17 @@ func main() {
 	cmd := "serve"
 	if len(os.Args) > 1 {
 		cmd = os.Args[1]
+	}
+	if cmd == "healthcheck" { // container healthcheck: distroless images have no curl
+		addr := os.Getenv("ANALYST_ADDR")
+		if addr == "" || addr[0] == ':' {
+			addr = "127.0.0.1" + addr
+		}
+		resp, err := (&http.Client{Timeout: 3 * time.Second}).Get("http://" + addr + "/healthz")
+		if err != nil || resp.StatusCode != http.StatusOK {
+			os.Exit(1)
+		}
+		os.Exit(0)
 	}
 	cfg, err := config.LoadCore()
 	setupLogging(cfg.LogLevel)
@@ -96,10 +113,26 @@ func serve(ctx context.Context, cfg config.Core) error {
 	hub := api.NewHub()
 	go hub.Run(b)
 
+	rs, err := rules.Load(cfg.RulesPath)
+	if err != nil {
+		return err
+	}
+	ml := mlclient.New(cfg.MLURL)
+	mg, err := maze.Load(cfg.MazePath)
+	if err != nil {
+		return err
+	}
+	mc := &maze.Controller{Graph: mg, Store: st, Bus: b, Adaptive: cfg.MazeAdaptive}
+	eng := &engine.Engine{Store: st, Bus: b, Rules: rs, ML: ml, Maze: mc}
+	go eng.Run(ctx)
+	go (&incident.Manager{Store: st, Bus: b}).Run(ctx)
+	narrator := &narrate.Narrator{ML: ml, MaxPerHour: cfg.NarrateMaxHr}
+	slog.Info("intel engine started", "rules", len(rs.Rules), "ml", ml.Enabled())
+
 	sensorMux := http.NewServeMux()
-	(&ingest.Server{Store: st, Bus: b, Keys: cfg.SensorKeys}).Routes(sensorMux)
+	(&ingest.Server{Store: st, Bus: b, Keys: cfg.SensorKeys, Maze: mc}).Routes(sensorMux)
 	analystMux := http.NewServeMux()
-	(&api.Server{Store: st, Bus: b, Hub: hub,
+	(&api.Server{Store: st, Bus: b, Hub: hub, DB: st, ML: ml, ScorerLearn: cfg.ScorerLearn, Narrator: narrator, DashboardURL: cfg.DashboardURL, MazeGraph: mg,
 		Auth: &api.Auth{Secret: cfg.JWTSecret, TTL: cfg.SessionTTL, Secure: cfg.CookieSecure}}).Routes(analystMux)
 
 	servers := []*http.Server{

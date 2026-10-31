@@ -1,0 +1,40 @@
+# Maze graph (08). Generated from docs/08-deception-maze.md; the doc is the spec.
+version: 1
+themes: [cloud, k8s, db, ci]
+nodes:
+  - {id: web_entry,       kind: entry,   service: web,    label: Admin web}
+  - {id: lure_backup,     kind: lure,    theme: null,     label: backup.zip,          token: tok_backup_key, default: visible}
+  - {id: ssh_entry,       kind: entry,   service: ssh,    label: SSH shell}
+  - {id: lure_aws,        kind: lure,    theme: cloud,    label: ~/.aws/credentials,  token: tok_aws_k7,  default: visible}
+  - {id: lure_kubeconfig, kind: lure,    theme: k8s,      label: deploy/kubeconfig,   token: tok_kube,    default: hidden}
+  - {id: lure_db,         kind: lure,    theme: db,       label: /etc/app/db.env,     token: tok_db,      default: hidden}
+  - {id: svc_beacon,      kind: service, service: beacon, label: AWS-style beacon}
+  - {id: svc_k8s,         kind: service, service: k8s,    label: K8s API}
+  - {id: lure_ci_secret,  kind: lure,    theme: ci,       label: ci-jenkins-token secret, default: hidden}
+  - {id: svc_jenkins,     kind: service, service: web,    label: Jenkins decoy, stretch: true}
+  - {id: svc_db,          kind: service, service: null,    label: DB decoy,      stretch: true}
+edges:
+  - {from: web_entry, to: lure_backup}
+  - {from: lure_backup, to: ssh_entry, label: uses leaked key}
+  - {from: ssh_entry, to: lure_aws}
+  - {from: ssh_entry, to: lure_kubeconfig}
+  - {from: ssh_entry, to: lure_db}
+  - {from: lure_aws, to: svc_beacon}
+  - {from: lure_kubeconfig, to: svc_k8s}
+  - {from: svc_k8s, to: lure_ci_secret}
+  - {from: lure_ci_secret, to: svc_jenkins}
+  - {from: lure_db, to: svc_db}
+interest_signals:          # (regex over command/path/api, theme, points)
+  - {match: 'kubectl|\.kube|kubeconfig|6443|k8s|kubernetes', theme: k8s, points: 3}
+  - {match: 'docker|containerd|helm', theme: k8s, points: 1}
+  - {match: '\.aws|aws |s3|iam|169\.254\.169\.254', theme: cloud, points: 3}
+  - {match: 'mysql|psql|postgres|DB_PASS|database|\.env', theme: db, points: 2}
+  - {match: 'grep.*-i.*pass', theme: db, points: 2}
+  - {match: 'jenkins|gitlab|ci|pipeline|\.git', theme: ci, points: 2}
+limits:
+  max_depth: 6
+  unlocks_per_10min: 3
+  loops_per_theme: 3
+  idle_timeout: 10m
+  session_cap: 30m
+  requests_per_session: 500

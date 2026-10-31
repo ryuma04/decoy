@@ -1,0 +1,109 @@
+# Deception SOC (12-infrastructure). `docker compose up --build` runs core + ML (+ local Postgres if no Neon URL).
+# Profiles: localdb (Postgres in Docker), decoys (needs docs/17 rows 1-4), ui (dashboard), mock (webhook mock), demo.
+name: deception-soc
+
+networks:
+  decoy_net: { internal: true }   # decoys: no internet, only core
+  mgmt_net: {}
+  egress: {}
+
+volumes: { pgdata: {}, sshdata: {}, quarantine: {}, seed: {}, prodlogs: {} }
+
+x-decoy: &decoy
+  build: { context: ./backend/go }
+  networks: [decoy_net]
+  read_only: true
+  tmpfs: [/tmp]
+  cap_drop: [ALL]
+  security_opt: ["no-new-privileges:true"]
+  mem_limit: 256m
+  pids_limit: 128
+  restart: unless-stopped
+  profiles: [decoys]
+
+services:
+  postgres:
+    image: postgres:16-alpine
+    profiles: [localdb]
+    environment: { POSTGRES_DB: dsoc, POSTGRES_USER: dsoc, POSTGRES_PASSWORD: "${PG_PASSWORD:-change-me}" }
+    volumes: [pgdata:/var/lib/postgresql/data]
+    networks: [mgmt_net]
+    healthcheck: { test: ["CMD-SHELL", "pg_isready -U dsoc"], interval: 5s, retries: 10 }
+
+  seed:   # persona + honeytokens (06 §5); run once before the decoys
+    build: { context: ./backend/go, args: { CMD: seed } }
+    environment:
+      DATABASE_URL: "${DATABASE_URL:-postgres://dsoc:${PG_PASSWORD:-change-me}@postgres:5432/dsoc?sslmode=disable}"
+      PERSONA_SEED: "${PERSONA_SEED:-}"
+      SEED_OUT: /seed/out
+    volumes: [seed:/seed/out]
+    networks: [mgmt_net, egress]
+    depends_on:
+      postgres: { condition: service_healthy, required: false }
+
+  core:
+    build: { context: ./backend/go, args: { CMD: core } }
+    command: ["serve"]
+    env_file: .env
+    environment:
+      DATABASE_URL: "${DATABASE_URL:-postgres://dsoc:${PG_PASSWORD:-change-me}@postgres:5432/dsoc?sslmode=disable}"
+      ML_URL: http://ml:8000
+      SENSOR_ADDR: ":8443"
+      ANALYST_ADDR: ":8090"
+      RULES_PATH: /rules/rules.yaml
+      MAZE_PATH: /maze/maze.yaml
+    networks: [decoy_net, mgmt_net, egress]
+    depends_on:
+      postgres: { condition: service_healthy, required: false }
+    restart: unless-stopped
+    healthcheck: { test: ["CMD", "/app", "healthcheck"], interval: 10s, retries: 5, start_period: 10s }
+
+  ml:   # input-risk model + LLM narration (10)
+    build: ./ai-service/fastapi
+    environment:
+      LLM_PROVIDER: "${LLM_PROVIDER:-openai_compat}"
+      LLM_BASE_URL: "${LLM_BASE_URL:-}"
+      LLM_MODEL: "${LLM_MODEL:-}"
+      LLM_API_KEY: "${LLM_API_KEY:-}"
+    networks: [mgmt_net, egress]
+    restart: unless-stopped
+
+  frontend:
+    build: ./frontend/nextjs
+    profiles: [ui]
+    environment: { CORE_API_URL: http://core:8090 }
+    ports: ["3000:3000"]
+    networks: [mgmt_net]
+
+  webhook-mock:
+    build: { context: ./backend/go, args: { CMD: webhook-mock } }
+    profiles: [mock]
+    networks: [mgmt_net]
+
+  decoy-ssh:
+    <<: *decoy
+    build: { context: ./backend/go, args: { CMD: decoy-ssh } }
+    environment: { SENSOR_ID: ssh-01, SENSOR_KEY: "${KEY_SSH}", CORE_URL: http://core:8443, LISTEN_ADDR: ":2222", PERSONA_SEED: "${PERSONA_SEED:-}" }
+    volumes: [sshdata:/data, quarantine:/data/quarantine, seed:/seed:ro]
+    ports: ["2222:2222"]
+
+  decoy-web:
+    <<: *decoy
+    build: { context: ./backend/go, args: { CMD: decoy-web } }
+    environment: { SENSOR_ID: web-01, SENSOR_KEY: "${KEY_WEB}", CORE_URL: http://core:8443, LISTEN_ADDR: ":8080" }
+    volumes: [seed:/seed:ro]
+    ports: ["8080:8080"]
+
+  decoy-k8s:
+    <<: *decoy
+    build: { context: ./backend/go, args: { CMD: decoy-k8s } }
+    environment: { SENSOR_ID: k8s-01, SENSOR_KEY: "${KEY_K8S}", CORE_URL: http://core:8443, LISTEN_ADDR: ":6443" }
+    volumes: [seed:/seed:ro]
+    ports: ["6443:6443"]
+
+  decoy-beacon:
+    <<: *decoy
+    build: { context: ./backend/go, args: { CMD: decoy-beacon } }
+    environment: { SENSOR_ID: beacon-01, SENSOR_KEY: "${KEY_BEACON}", CORE_URL: http://core:8443, LISTEN_ADDR: ":8088" }
+    volumes: [seed:/seed:ro]
+    ports: ["8088:8088"]
