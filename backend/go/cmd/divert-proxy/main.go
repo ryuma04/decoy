@@ -16,6 +16,7 @@ import (
 	"time"
 
 	"github.com/ryuma04/decoy/backend/internal/divert"
+	"github.com/ryuma04/decoy/backend/internal/mlclient"
 	"github.com/ryuma04/decoy/backend/internal/sensorkit"
 )
 
@@ -46,24 +47,9 @@ func loadTokens(seedDir string) map[string]divert.Honeytoken {
 		}
 	}
 
-	slog.Warn("could not find tokens.json; using default token identifiers")
-	return map[string]divert.Honeytoken{
-		"tok_aetees_admin": {
-			TokenID:    "tok_aetees_admin",
-			Kind:       "admin_password",
-			MatchValue: "BakeAdmin2026!Secret",
-		},
-		"tok_db": {
-			TokenID:    "tok_db",
-			Kind:       "db_password",
-			MatchValue: "AeteesDbPass42!",
-		},
-		"tok_aetees_invoice": {
-			TokenID:    "tok_aetees_invoice",
-			Kind:       "url",
-			MatchValue: "/invoices/view/a8f9c0e21b4d3e5f",
-		},
-	}
+	slog.Error("tokens.json not found; run cmd/seed first (the proxy needs the planted honeytoken values)")
+	os.Exit(1)
+	return nil
 }
 
 func main() {
@@ -93,17 +79,12 @@ func main() {
 
 	tokens := loadTokens(seedDir)
 
-	adminToken := "BakeAdmin2026!Secret"
-	if t, ok := tokens["tok_aetees_admin"]; ok && t.MatchValue != "" {
-		adminToken = t.MatchValue
-	}
-	dbToken := "AeteesDbPass42!"
-	if t, ok := tokens["tok_db"]; ok && t.MatchValue != "" {
-		dbToken = t.MatchValue
-	}
-	invoiceToken := "/invoices/view/a8f9c0e21b4d3e5f"
-	if t, ok := tokens["tok_aetees_invoice"]; ok && t.MatchValue != "" {
-		invoiceToken = t.MatchValue
+	adminToken := tokens["tok_aetees_admin"].MatchValue
+	dbToken := tokens["tok_db"].MatchValue
+	invoiceToken := tokens["tok_aetees_invoice"].MatchValue
+	if adminToken == "" || dbToken == "" || invoiceToken == "" {
+		slog.Error("tokens.json lacks tok_aetees_admin / tok_db / tok_aetees_invoice; run: go run ./cmd/seed -add-missing")
+		os.Exit(1)
 	}
 
 	var kit *sensorkit.Kit
@@ -125,7 +106,7 @@ func main() {
 	})
 	lureMgr := divert.NewLureManager(adminToken, dbToken, invoiceToken)
 	tacticsMgr := divert.NewTacticsManager(dataDir, mlURLStr, adminToken)
-	tripwire := divert.NewTripwire()
+	tripwire := divert.NewTripwire(mlclient.New(mlURLStr)) // input-risk model for values the cheap pre-check passes
 
 	proxyCfg := divert.ProxyConfig{
 		RealURL:    realURL,
@@ -152,6 +133,9 @@ func main() {
 
 	ctx, cancel := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
 	defer cancel()
+	if kit != nil {
+		kit.Start(ctx) // sends events and polls policy (Divert / Release from the dashboard) every 5 s
+	}
 
 	go func() {
 		slog.Info("divert proxy listening", "addr", listenAddr, "real", realURLStr, "clone", cloneURLStr)

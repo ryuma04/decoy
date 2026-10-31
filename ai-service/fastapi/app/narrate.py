@@ -4,6 +4,7 @@ Provider-neutral. LLM_PROVIDER=openai_compat (default: Groq, Gemini, OpenRouter,
 No key -> LLMOff, and the Go core uses its own template.
 """
 import hashlib
+import html
 import json
 import os
 import re
@@ -222,6 +223,30 @@ def narrate(req: NarrateRequest, cfg: Config | None = None, client: httpx.Client
     return {**out, "source": "llm", "model": cfg.model, "prompt_hash": PROMPT_HASH, "guard": checks}
 
 
+_LURE_BAD = re.compile(r"<\s*(script|iframe|object|embed|form|meta|link|base|style)\b|\bon[a-z]+\s*=|javascript:|data:text/html"
+                       r"|src\s*=\s*[\"']?(https?:)?//|href\s*=\s*[\"']?(https?:)?//", re.I)
+_LURE_EMAIL = re.compile(r"[\w.+-]+@(?!example\.|aetees)[\w-]+\.[\w.]+", re.I)
+
+
+def guard_lure_page(title: str, body_html: str) -> tuple[str, str]:
+    """Reject model HTML that could run code, load or link off-site, or carry real-looking emails."""
+    if not isinstance(title, str) or not isinstance(body_html, str) or not title.strip() or not body_html.strip():
+        raise LLMError("lure guard: empty fields")
+    if len(title) > 120 or len(body_html) > 6000:
+        raise LLMError("lure guard: too long")
+    if _LURE_BAD.search(body_html) or _LURE_BAD.search(title) or _INJECTION.search(body_html):
+        raise LLMError("lure guard: unsafe html")
+    if _LURE_EMAIL.search(body_html):
+        raise LLMError("lure guard: real-looking email")
+    return html.escape(title.strip()), body_html.strip()
+
+
+def _lure_fallback(path: str, site: str) -> dict:
+    p = html.escape(path[:200])
+    return {"title": f"Internal Portal — {site}",
+            "body_html": f"<div class='notice'><h3>Notice: Restricted Area ({p})</h3><p>Authorized personnel only.</p></div>"}
+
+
 def generate_lure_page(path: str, site: str = "Aetees Bakehouse", cfg: Config | None = None) -> dict:
     cfg = cfg or Config.from_env()
     prompt = (
@@ -234,18 +259,12 @@ def generate_lure_page(path: str, site: str = "Aetees Bakehouse", cfg: Config | 
         f"and NEVER include real personal data. Use only mock synthetic data."
     )
     if not cfg.enabled:
-        return {
-            "title": f"Internal Portal — {site}",
-            "body_html": f"<div class='notice'><h3>Notice: Restricted Area ({path})</h3><p>Authorized personnel only.</p></div>"
-        }
+        return _lure_fallback(path, site)
     try:
         raw = call_llm(cfg, user=prompt, system="You generate synthetic decoy portal HTML. Output valid JSON.", max_tokens=600)
+        raw = re.sub(r"^```(?:json)?\s*|\s*```$", "", raw.strip())
         data = json.loads(raw)
-        title = data.get("title", f"Internal Portal — {site}")
-        body_html = data.get("body_html", f"<div class='notice'><h3>Notice: Restricted Area ({path})</h3><p>Authorized personnel only.</p></div>")
+        title, body_html = guard_lure_page(data.get("title", ""), data.get("body_html", ""))
         return {"title": title, "body_html": body_html}
-    except Exception:
-        return {
-            "title": f"Internal Portal — {site}",
-            "body_html": f"<div class='notice'><h3>Notice: Restricted Area ({path})</h3><p>Authorized personnel only.</p></div>"
-        }
+    except (LLMError, ValueError, AttributeError, TypeError):
+        return _lure_fallback(path, site)

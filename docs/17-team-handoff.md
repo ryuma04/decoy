@@ -34,7 +34,7 @@ Still open (not attempted yet; specified in the docs):
 | 9 | External-telemetry linking (`intel/extlink`): link `origin: production` events to actors, findings `decoy_cred_on_real`, `real_bruteforce`, `real_success`, `fw_repeat`, set `touched_production` | 07 §8.2 | `cmd/log-collector` and `logparse` (built); engine skips production events today |
 | 10 | Tool detection (`intel/tools`, `rules/tools.yaml`) → `actors.tools` | 07 §9.1 | `dto.ToolTag`, `actors.tools` column |
 | 11 | Stretch: cognitive tactics, LLM lures, false-positive recovery | 08 §Cognitive / §LLM lures, 09 §Recovery | done (Antigravity) |
-| 12 | Divert proxy for the Aetees shop (`internal/divert`, `cmd/divert-proxy`): same-URL routing real ↔ clone, tripwires, lures, cognitive tactics, auto-release, LLM pages for unknown paths | Tasks 9–12 in 18 | done (Antigravity) |
+| 12 | Divert proxy for the Aetees shop (internal/divert, cmd/divert-proxy) | Tasks 9–12 in 18 | **done** (team, 2026-10-31); wired and verified end to end: sensorkit started (events + policy), ML input-risk in the tripwire, LLM page guard, status + query object in http.request, one session per diverted visitor, etees-01 key in SENSOR_KEYS |
 
 Known limits found while testing:
 - Each event costs the engine several Postgres round trips; against Neon in eu-west-2 from India that is ~2–4 s

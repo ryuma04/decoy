@@ -6,6 +6,7 @@ import (
 	"encoding/hex"
 	"encoding/json"
 	"fmt"
+	"html"
 	"net/http"
 	"net/url"
 	"os"
@@ -66,9 +67,6 @@ type TacticsManager struct {
 func NewTacticsManager(dataDir, mlURL, cloneAdminPW string) *TacticsManager {
 	if dataDir == "" {
 		dataDir = ".data"
-	}
-	if cloneAdminPW == "" {
-		cloneAdminPW = "BakeAdmin2026!Secret"
 	}
 	_ = os.MkdirAll(filepath.Join(dataDir, "lure_pages"), 0755)
 
@@ -290,6 +288,9 @@ func (tm *TacticsManager) CheckLLMPage(w http.ResponseWriter, r *http.Request, v
 	return true
 }
 
+// unsafeLureHTML is the Go-side second check on ML-generated pages (the ML service guards first).
+var unsafeLureHTML = regexp.MustCompile(`(?i)<\s*(script|iframe|object|embed|form|meta|link|base|style)\b|\bon[a-z]+\s*=|javascript:|(src|href)\s*=\s*["']?(https?:)?//`)
+
 func (tm *TacticsManager) generateLureContent(path string) (string, string) {
 	if tm.mlURL != "" && tm.httpClient != nil {
 		reqBody, _ := json.Marshal(map[string]string{
@@ -307,8 +308,9 @@ func (tm *TacticsManager) generateLureContent(path string) (string, string) {
 						Title    string `json:"title"`
 						BodyHTML string `json:"body_html"`
 					}
-					if err := json.NewDecoder(resp.Body).Decode(&lureResp); err == nil && lureResp.Title != "" && lureResp.BodyHTML != "" {
-						return lureResp.Title, lureResp.BodyHTML
+					if err := json.NewDecoder(resp.Body).Decode(&lureResp); err == nil && lureResp.Title != "" && lureResp.BodyHTML != "" &&
+						!unsafeLureHTML.MatchString(lureResp.BodyHTML) {
+						return html.EscapeString(html.UnescapeString(lureResp.Title)), lureResp.BodyHTML
 					}
 				}
 			}
@@ -321,7 +323,7 @@ func (tm *TacticsManager) generateLureContent(path string) (string, string) {
   <h3>Notice: Restricted Area (%s)</h3>
   <p>This portal is reserved for authorized bakery management and kitchen staff.</p>
   <p>To access order archives or export data, please log in with administrative credentials.</p>
-</div>`, path)
+</div>`, html.EscapeString(path))
 
 	return title, body
 }

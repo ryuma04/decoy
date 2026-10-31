@@ -1,6 +1,7 @@
 package divert
 
 import (
+	"encoding/json"
 	"bytes"
 	"crypto/rand"
 	"encoding/hex"
@@ -243,7 +244,13 @@ func (p *Proxy) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	// 5. Honeytoken detection in body or URL
 	if ht, matched := p.checkHoneytokens(r, body); matched {
 		v.mu.Lock()
-		p.divertLocked(v, SevHard, "honeytoken used: "+ht.TokenID, "honeytoken", clientIP, clientPort)
+		if v.Diverted { // already in the clone: keep the same session (one timeline), just make it hard
+			v.Severity = SevHard
+			v.Reason = "honeytoken used: " + ht.TokenID
+			v.Label = "honeytoken"
+		} else {
+			p.divertLocked(v, SevHard, "honeytoken used: "+ht.TokenID, "honeytoken", clientIP, clientPort)
+		}
 		sess := v.Session
 		v.mu.Unlock()
 
@@ -318,9 +325,12 @@ func (p *Proxy) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 
-	// 9. Monitoring for diverted visitors: emit telemetry to core
+	// 9. Monitoring for diverted visitors: report each request to core after it is answered, with its status
 	if isDivertedNow && divertedSession != nil && !isStaticAsset(r.URL.Path) {
-		p.emitDivertedMonitoring(divertedSession, r, body, trip)
+		rec := &statusRecorder{ResponseWriter: w, status: http.StatusOK}
+		w = rec
+		reqBody := body
+		defer func() { p.emitDivertedMonitoring(divertedSession, r, reqBody, trip, rec.status) }()
 	}
 
 	// 10. Diverted-only cognitive tactics & planted lures
@@ -403,29 +413,38 @@ func (p *Proxy) checkHoneytokens(r *http.Request, body []byte) (Honeytoken, bool
 	return Honeytoken{}, false
 }
 
-func (p *Proxy) emitDivertedMonitoring(sess *sensorkit.Session, r *http.Request, body []byte, trip Trip) {
+func (p *Proxy) emitDivertedMonitoring(sess *sensorkit.Session, r *http.Request, body []byte, trip Trip, status int) {
 	sample := string(body)
 	if len(sample) > 512 {
 		sample = sample[:512]
+	}
+	query := map[string]any{} // object, as 02 specifies: core grades each value with the input-risk model
+	for k, vs := range r.URL.Query() {
+		if len(vs) == 1 {
+			query[k] = vs[0]
+		} else {
+			query[k] = vs
+		}
 	}
 
 	sess.Event("http.request", "", map[string]any{
 		"method":      r.Method,
 		"path":        r.URL.Path,
-		"query":       r.URL.RawQuery,
+		"query":       query,
+		"status":      status,
 		"ua":          r.UserAgent(),
 		"body_sample": sample,
 	}, nil, nil)
 
 	if r.Method == http.MethodPost && r.URL.Path == "/api/admin/login" {
-		username := r.FormValue("username")
-		if username == "" {
-			username = "admin"
+		var creds struct {
+			Username string `json:"username"`
 		}
+		_ = json.Unmarshal(body, &creds) // the shop's login posts JSON
 		sess.Event("auth.attempt", "", map[string]any{
 			"method":   "form",
-			"username": username,
-			"success":  false,
+			"username": creds.Username,
+			"success":  status == http.StatusOK,
 		}, nil, nil)
 	}
 
@@ -435,6 +454,23 @@ func (p *Proxy) emitDivertedMonitoring(sess *sensorkit.Session, r *http.Request,
 			"value": trip.Value,
 			"path":  r.URL.Path,
 		}, nil, nil)
+	}
+}
+
+// statusRecorder remembers the status written to the visitor (for the http.request event).
+type statusRecorder struct {
+	http.ResponseWriter
+	status int
+}
+
+func (s *statusRecorder) WriteHeader(code int) {
+	s.status = code
+	s.ResponseWriter.WriteHeader(code)
+}
+
+func (s *statusRecorder) Flush() {
+	if f, ok := s.ResponseWriter.(http.Flusher); ok {
+		f.Flush()
 	}
 }
 
