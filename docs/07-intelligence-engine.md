@@ -71,7 +71,12 @@ Our own format (inspired by Echidra's condition lists; content is ours):
         path_regex: '(\.aws/credentials|\.kube/config|kubeconfig|\.env|id_(rsa|ed25519))'
   technique: T1552.001
   points: 15
-  ml_assist: command      # also ask ML command classifier; see 10
+- id: cmd_injection
+  title: Command injection attempt
+  scope: event
+  when: { input_label: cmd_injection, input_risk_gte: 0.5 }   # from the input-risk model or the rule fallback, see below
+  technique: T1190
+  points: 20                                                   # scaled by input risk
 - id: password_guessing
   title: Password guessing
   scope: session
@@ -102,13 +107,34 @@ Starter rule set (all must exist by Gate 3):
 | `obfuscated_command` | base64 -d \| sh, eval, hex/printf tricks | T1027 / T1140 | 15 |
 | `container_discovery` | k8s list pods/nodes/namespaces | T1613 | 15 |
 | `container_secrets` | k8s get/list secrets | T1552.007 | 20 |
-| `cmd_injection` | `input.suspicious` confirmed by rule or ML ≥ 0.8 | T1190 | 20 |
-| `sqli_attempt` | `input.suspicious` sqli | T1190 | 15 |
+| `cmd_injection` | input risk ≥ 0.5, label `cmd_injection` | T1190 | 20 × risk |
+| `sqli_attempt` | input risk ≥ 0.5, label `sqli` | T1190 | 15 × risk |
+| `xss_attempt` | input risk ≥ 0.5, label `xss` | T1190 | 10 × risk |
+| `path_traversal_attempt` | input risk ≥ 0.5, label `path_traversal` | T1190 | 15 × risk |
 | `multi_decoy` | actor active on ≥ 3 services | — | 15 |
 
-ML assist (if `ML_URL` set): when a rule with `ml_assist` fires, or a `shell.command` matched no rule,
-call the classifier. Agreement → `source: rule+ml`, confidence = max. ML-only with confidence ≥ 0.8 → finding
-`ml_<label>` with **half** the points of the matching rule family and `source: ml`.
+### 4.1 Input risk (the only ML in the engine)
+
+Which values are scored: `input.suspicious` values, web query/form parameters (≤ 10 per request, ≤ 1 KB each), URL
+paths containing `%`, `..` or `\`, web/app login usernames (10 §IR). Values matching the fast-path regex
+(`^[A-Za-z0-9 _.,@:/+-]{0,64}$` and not matching `(?i)\.\.|--|file:|(^|/)(etc|proc|root|var/log|windows)/|\.ini\b`) get risk 0 without a call. Same rule as `app/preprocess.is_plain` in the ML service.
+
+1. **Rule check (always, deterministic):** the decoy's separator/SQL/`../`/`<script` patterns from 06, re-run in Go
+   after URL-decoding twice. A hit gives `rule_label` and `rule_risk = 0.9`.
+2. **Model (if `ML_URL` set):** `classify-input` → `label`, `risk`, `top_features`, `payload`, `was_encoded`.
+3. **Combine:**
+   - both agree on the label → `source: rule+ml`, `risk = max(rule_risk, model risk)`;
+   - model only (rule missed, e.g. encoded or unusual spacing) → `source: ml`, model risk;
+   - rule only (ML off or timed out) → `source: rule`, `risk = 0.9`;
+   - they disagree on the label → keep the model's label if its risk ≥ 0.8, else the rule's.
+4. **Finding:** if `risk ≥ 0.5` (`INPUT_RISK_MIN`), the rule for the label fires with `points = round(base × risk)`,
+   `confidence = risk`, stage `access`, evidence `{matched: value, ml: {label, risk, confidence, top_features, was_encoded}}`.
+   Below 0.5 nothing fires; the score is only logged.
+5. **Injected payload:** for `cmd_injection` the `payload` (e.g. `cat /etc/passwd`) is also run through the event
+   rules for `shell.command` (as if typed in a shell), so `account_discovery` or `cred_file_search` can fire from a
+   web injection. Evidence links back to the `input.suspicious` event.
+
+SSH shell commands are handled by the rules only; there is no command model.
 
 ## 5. MITRE (`intel/mitre`)
 
@@ -199,7 +225,7 @@ Features (per actor, from SSH + web):
 | `param_mutation_retries` | same argv0 retried with changed args after non-zero exit or HTTP ≥ 400 |
 | `commands` | total commands + API calls |
 
-Rules (used when ML off or `commands < 5` → `unknown`):
+Rules (the only classifier; `commands < 5` → `unknown`):
 
 - `scripted`: median gap < 1,000 ms and gap_cv < 0.3 and edit_rate = 0.
 - `agent_like`: ≥ 3 of: paste_rate ≥ 0.7, edit_rate = 0, output_dependence ≥ 0.5, 2 s ≤ median gap ≤ 20 s with
@@ -208,8 +234,8 @@ Rules (used when ML off or `commands < 5` → `unknown`):
 - `ai_assisted`: human_like signals **and** ≥ 2 agent signals.
 - else `unknown`.
 
-If ML is on and `commands ≥ 5`, call `/ml/v1/classify-session`; use ML class when its top score ≥ 0.6, else rules.
-Recompute at 5, 10, 20, 40 commands.
+Scores per class (`BehaviourDetail.scores`) = share of that class's conditions met, so the UI can show bars.
+Recompute at 5, 10, 20, 40 commands. A trained behaviour model is future scope (16).
 
 ## 8. External telemetry correlation (`intel/extlink`)
 
@@ -254,6 +280,7 @@ never executes them.
 | Tools | e.g. "nmap, Hydra, curl 8.x, OpenSSH 9.6 client, sqlmap" | §9.1 tool rules |
 | Behaviour | kill-chain stage, MITRE techniques, human/script/agent class, interests (db, k8s, cloud), speed (recon → credential use time), stage scores | rules, state machine, §7 |
 | Timeline | one merged list of decoy events, findings, maze unlocks, firewall and real-auth events, colour-coded by origin | events table |
+| What happened | plain-English headline, ≤ 120-word story and bullets, refreshed at most every 60 s | `internal/narrate` (LLM or template, 10 §N) |
 
 ### 9.1 Tool detection (`intel/tools`, `rules/tools.yaml`)
 

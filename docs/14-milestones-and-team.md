@@ -5,10 +5,10 @@ Day-zero rule: **freeze 02 (event schema), 03 (database) and 04 (API contract) b
 
 | Person | Tool | M1 Pipeline | M2 Decoys | M3 Intelligence | M4 Respond | M5 Signature |
 | --- | --- | --- | --- | --- | --- | --- |
-| P1 Backend lead | Claude Code | config, event, store, migrations, ingest, bus, SSE, auth, events API | maze-view (static), policy API, sensor heartbeat/status | fingerprint, honeytoken, correlate, features, rules, MITRE, risk, scan, actor APIs | alert, Discord/Slack, incidents, response, report, mlclient | adaptive maze, behaviour engine, summary hook |
+| P1 Backend lead | Claude Code | config, event, store, migrations, ingest, bus, SSE, auth, events API | maze-view (static), policy API, sensor heartbeat/status | fingerprint, honeytoken, correlate, features, rules, MITRE, risk, scan, actor APIs | alert, Discord/Slack, incidents, response, report, mlclient | adaptive maze, behaviour engine, `narrate` (alerts, actor card, Explain) |
 | P2 Frontend | Antigravity | types, mocks, api layer, layout, login, overview, live events | actors list | actor profile (sessions graph, timeline, ATT&CK, behaviour) | incidents, actions, report download, honeytokens, sensors | maze graph live, polish, demo mode |
 | P3 Decoys + infra | any | compose, Dockerfiles, networks, sensorkit, minimal SSH decoy | persona, fakefs, seed, full SSH, web, k8s, beacon | attacker container, attack.sh, webhook mock | e2e.sh, hardening, VM setup | maze-aware decoy views, bounded loops in decoys |
-| P4 ML + demo | any | FastAPI skeleton + `/health`, data generators M1/M2 | train M1, M2; model cards | CodeGuard integration, `/classify-input` payload extraction; collect M3 sessions (with team) | train M3, summary + template, pitch deck | rehearsal, video fallback |
+| P4 ML + demo | any | FastAPI skeleton + `/health`, input value generator | train input-risk model, evaluate, model card | `/classify-input` payload extraction + calibration; `/narrate` with output guard | narration prompt tuning on demo runs, pitch deck | rehearsal, video fallback |
 
 ### Added 2026-10-31
 
@@ -51,6 +51,6 @@ Day-zero rule: **freeze 02 (event schema), 03 (database) and 04 (API contract) b
 1. Jenkins and DB decoys (already stretch).
 2. HASSH / JA4 fingerprints.
 3. Slack (keep Discord).
-4. M3 ML model (keep behaviour rules).
-5. LLM summary (keep template).
+4. Event **Explain** button (keep alert + actor narration).
+5. LLM narration entirely (keep Go templates; set `LLM_API_KEY` empty).
 6. Adaptive unlocks (keep static maze with default lures) — last resort, it is the signature feature.

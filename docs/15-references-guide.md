@@ -15,7 +15,7 @@ Rules: `../../AGENTS.md` §3. Read to learn; write our own. Note what you learne
 | File canary, web router decoy | `references/honeywire` | `Sensors/official/FileCanary`, `WebRouterDecoy` | Lure placement and trigger semantics |
 | Adaptive maze | `references/labyrinth` (**AGPL**) | `docs/LAYERS.md`, `docs/ARCHITECTURE.md`, `src/layer2_maze/contradictions.py`, `src/orchestrator/session_manager.py` | Escalation paths, adaptive mode, per-deploy random bait. **Skip** L3/L4 |
 | AI-agent behaviour | `references/labyrinth` | `docs/THREAT_MODEL.md`, `ETHICAL_USE.md` | Agent "cognitive dependencies"; ethics boundary = decoy perimeter |
-| Command / injection detection | `references/codeguard` (team's own) | `codeguard/rules.py`, `deobfuscate.py`, `injection.py`, `textclf.py`, `eval/train_injection.py` | Rule + deobfuscation + TF-IDF/LR design; may be run unmodified as an optional service (10) |
+| Input-risk model, prompt-injection phrases | `references/codeguard` (team's own) | `codeguard/deobfuscate.py`, `injection.py`, `textclf.py`, `eval/train_injection.py` | Decode-then-score, TF-IDF/LR training, threshold picked on held-out FPR; injection phrase list idea for the narration guard. Not run as a service any more (decisions 2026-10-31) |
 
 Repo facts (checked 30 Oct 2026): Cowrie Python, last commit 30 Oct 2026; Wisp Go, 2 Aug 2026; EchidraOSS Python,
 23 Oct 2026; HoneyWire Go hub + Vue UI, 28 Aug 2026; LABYRINTH Go CLI + Python layers, 15 Mar 2026 (least active —

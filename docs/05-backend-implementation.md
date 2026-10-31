@@ -37,7 +37,8 @@ internal/
     risk/                    per-stage scores, single-neuron combiner, overrides, feedback weight updates (07 §6)
     extlink/                 link external (production) events to decoy actors (07 §8)
     tools/                   tool detection rules (07 §9.1)
-    behaviour/               rule classifier + ML hand-off
+    behaviour/               rule classifier (07 §7)
+    inputrisk/               rule check + ML classify-input combine, payload hand-off (07 §4.1)
     honeytoken/              token match + token_hits
     scan/                    port-sweep detector (derived scan.detected)
   maze/                      graph loader, interest scorer, unlock logic, maze-view builder
@@ -46,7 +47,8 @@ internal/
   logparse/                  parsers for nftables/iptables, sshd auth.log, app JSON login logs (+ testdata)
   report/                    incident report (markdown/json)
   api/                       analyst REST, auth (JWT cookie), SSE hub, DTO mapping
-  mlclient/                  HTTP client with timeouts + circuit breaker
+  mlclient/                  HTTP client (ClassifyInput, Narrate) with timeouts + circuit breaker
+  narrate/                   facts builder, limits, cache (narrations table), output guard, Go templates (10 §N)
 migrations/                  0001_init.up.sql / .down.sql
 rules/rules.yaml             detection rules (07)
 maze/maze.yaml               maze graph (08)
@@ -98,7 +100,8 @@ correlation and scoring have no races. SSE hub subscribes to every topic.
 ### M4 — Respond
 11b. `intel/tools`, `logparse` + `cmd/log-collector`, `intel/extlink`; actor profile fields (source, tools, behaviour, timeline).
 12. `alert` (incidents, severity rules, Discord + Slack, cooldown), `response` (actions → policy), `report`.
-13. `mlclient` wired into rules (command + input classifiers) behind `ML_URL`.
+13. `intel/inputrisk` + `mlclient.ClassifyInput` behind `ML_URL`; `narrate` with Go templates first, then
+    `mlclient.Narrate` for alerts (3 s budget), actor card (60 s debounce) and `GET /v1/events/{id}/explain`.
     **Gate 3:** full chain end to end on the demo script; Discord message arrives; `block_ip` makes the next
     SSH connection from that IP fail.
 
@@ -106,7 +109,7 @@ correlation and scoring have no races. SSE hub subscribes to every topic.
 
 ### M5 — Signature
 14. `maze` adaptive unlocks + bounded loops; `GET /v1/actors/{id}/maze`.
-15. `intel/behaviour` rules + ML session classifier; incident summary via ML.
+15. `intel/behaviour` rules with per-class scores; incident narration on open / severity change.
 
 ## Error handling and safety
 
@@ -123,7 +126,10 @@ correlation and scoring have no races. SSE hub subscribes to every topic.
 | `SENSOR_KEYS` | — | core |
 | `SENSOR_ID`, `SENSOR_KEY`, `CORE_URL` | — | each decoy |
 | `JWT_SECRET`, `SOC_ADMIN_EMAIL`, `SOC_ADMIN_PASSWORD` | — | core |
-| `ML_URL` | empty = ML off | core |
+| `ML_URL` | empty = ML off (rules + Go templates) | core |
+| `INPUT_RISK_MIN` | `0.5` | core (minimum input risk that creates a finding) |
+| `NARRATE_MAX_PER_HOUR` | `120` | core (above it: template text) |
+| `LLM_API_KEY`, `LLM_MODEL` | empty | ml (narration), core (`lurgen`, 08); plus `LLM_PROVIDER` (`openai_compat`), `LLM_BASE_URL` |
 | `DISCORD_WEBHOOK_URL`, `SLACK_WEBHOOK_URL` | empty = off | core |
 | `DASHBOARD_URL` | `http://localhost:3000` | core (links in alerts) |
 | `PERSONA_SEED` | random at seed time | seed, decoys |

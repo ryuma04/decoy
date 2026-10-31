@@ -1,163 +1,223 @@
-# 10 — ML service (FastAPI)
+# 10 — ML service (FastAPI): input-risk model + readable activity (LLM)
 
-Three small classifiers + an incident summary. All optional at runtime: the Go core works without them
-(`ML_URL` empty, or timeout 300 ms → rules only). No deep learning: short text and a few numeric features
-are handled well by linear models and small trees that train in seconds and can explain their decisions.
+Two things only, both optional at runtime (`ML_URL` empty, timeout, or error → the Go core continues with rules and
+Go templates):
 
-| # | Model | Input | Labels | Algorithm |
+| # | Part | Input | Output | How |
 | --- | --- | --- | --- | --- |
-| M1 | Command intent | one shell command or injected payload | `benign, recon, credential_access, download_exec, persistence, destructive, obfuscated` | TF-IDF (char 2–5 + word 1–2) → Logistic Regression |
-| M2 | Web input | one HTTP parameter value | `normal, cmd_injection, sqli, xss, path_traversal` | TF-IDF (char 1–5) → Logistic Regression |
-| M3 | Behaviour | 9 numeric session features (07 §7) | `human_like, scripted, agent_like` | Decision tree (max_depth 4) or Random Forest (100 trees, depth 6) |
-| S | Incident summary | incident + timeline | text | LLM API if `LLM_API_KEY` set, else Jinja template |
+| IR | **Input-risk model** (the only trained model) | one value an attacker typed: form field, query/body parameter, URL path, login username | `risk` 0–1 + attack `label` + per-class scores | TF-IDF (char 1–5 + word 1–2) → Logistic Regression, scikit-learn |
+| N | **Readable activity** (LLM narration) | compact facts about an alert, actor, incident or one event | plain-English headline + ≤ 120-word text + ≤ 5 bullets | any LLM via `LLM_PROVIDER` (OpenAI-compatible or Claude); Go template fallback in core |
+
+Removed on 2026-10-31 (see `decisions.md`): the command-intent model, the behaviour model and the CodeGuard
+integration. SSH commands are handled by the rules in 07 §4; behaviour class by the rules in 07 §7. Both models are
+listed in 16 as future scope.
 
 ## Layout (`ai-service/fastapi/`)
 
 ```text
-pyproject.toml / requirements.txt   fastapi uvicorn scikit-learn==1.5.* joblib pandas numpy jinja2 httpx
+requirements.txt        fastapi uvicorn scikit-learn joblib pandas numpy httpx
 app/
   main.py               FastAPI app, routes from 04-api-contract §C, /health
-  schemas.py            pydantic models matching 04
-  models.py             lazy-load joblib pipelines, predict + top_features
-  codeguard.py          optional client for CodeGuard POST /analyze (CODEGUARD_URL)
-  summary.py            LLM call (httpx, 5 s timeout) + template fallback
-  templates/summary.md.j2
+  schemas.py            pydantic models matching 04 §C
+  input_model.py        load input.joblib once; normalise + decode, predict, risk, top_features, payload
+  narrate.py            Claude call (5 s timeout) + output guard; returns 503 when LLM is off
+  prompts/narrate.md    fixed system prompt (versioned; prompt hash stored with every narration)
 data/
-  generators/
-    commands.py         template generator for M1
-    inputs.py           generator for M2
-    sessions.py         feature extractor for M3 from exported sessions
-  raw/                  third-party lists (gitignored if license unclear) + LICENSES.md
-  processed/            commands.csv, inputs.csv, sessions.csv
+  generators/inputs.py  value generator (families × slot values from YAML)
+  generators/slots/*.yaml
+  raw/                  third-party payload lists (only with a recorded license) + LICENSES.md
+  hard_set.yaml         ~125 hand-written tricky values (never used for training)
+  processed/inputs.csv
 training/
-  train_command.py  train_input.py  train_behaviour.py
-  evaluate.py           reports → reports/*.md (precision, recall, F1, confusion matrix)
-models/                 command.joblib  input.joblib  behaviour.joblib  (+ model_card.md each)
-tests/                  test_api.py, test_models.py (golden examples)
+  train_input.py        fit + export models/input.joblib
+  evaluate.py           reports/input.md (per-class P/R/F1, confusion matrix, FPR on normal, calibration)
+models/input.joblib  models/input.model_card.md
+tests/                  test_api.py, test_input_model.py (golden values), test_narrate_guard.py
 Dockerfile
 ```
 
-## M1 — Command intent classifier
+## IR — Input-risk model
 
-**Why:** gives an attack-stage label and confidence for commands no rule matched, and a second opinion on rule
-matches (`source: rule+ml`).
+### What it answers
 
-**Data (target 4,000–6,000 lines, balanced):**
+"How likely is it that this value is an attack, and what kind?" for every attacker-typed value the web decoy and the
+real-target login page see. The decoys only *report*; the engine asks the model (07 §4).
 
-1. **Template generator** (`data/generators/commands.py`): families × slot values. Examples:
-   - recon: `uname -a`, `cat /etc/os-release`, `ps aux`, `netstat -tulpn`, `id {user}`, `ls -la {dir}`
-   - credential_access: `cat {credfile}`, `find / -name "{credpattern}" 2>/dev/null`, `grep -ri {kw} {dir}`
-   - download_exec: `wget {url} -O {tmp}; chmod +x {tmp}; {tmp}`, `curl -s {url} | sh`, `busybox wget …`
-   - persistence: `echo "{key}" >> ~/.ssh/authorized_keys`, `(crontab -l; echo "{cron}") | crontab -`
-   - destructive: `rm -rf {dir}`, `dd if=/dev/zero of={dev}`, `history -c`
-   - obfuscated: `echo {b64} | base64 -d | sh`, `eval $(printf "{hex}")`, `python3 -c "exec(…)"`
-   - benign: everyday admin commands (`df -h`, `git status`, `systemctl status nginx`, `tail -f /var/log/syslog`, `vim notes.txt`)
-   Slot lists live in YAML so teammates can add values without code.
-2. **Our own captures:** every command typed during practice runs of the demo and teammates' manual sessions
-   (exported from Postgres with `cmd/core export-commands`), labelled by a teammate.
-3. **Public payload lists** only if license allows (e.g. PayloadsAllTheThings, MIT; SecLists, MIT). Record each
-   source and license in `data/raw/LICENSES.md`.
+```text
+risk = 1 − P(normal)                       0.00 … 1.00, rounded to 2 decimals
+label = argmax over {normal, cmd_injection, sqli, xss, path_traversal}
+```
 
-**Avoid overfitting to templates:** split train/test by **template family**, not by row (GroupShuffleSplit), so
-the test set contains command shapes the model never saw. Also keep a 100-line hand-written "hard" set.
+Why one number *and* a label: the number grades severity and feeds the risk score; the label decides the finding
+title and MITRE technique ("SQL injection attempt", T1190). A bare 0.87 would not tell the analyst what happened.
 
-**Train (`training/train_command.py`):**
+### Which values are scored (core decides, 07 §4)
+
+- every `input.suspicious` event (`data.value`);
+- each query and form parameter of web `http.request` events (max 10 per request, each ≤ 1 KB);
+- the request path when it contains `%`, `..` or `\`;
+- `auth.attempt.username` on the web decoy and `auth.app_*` usernames from the real-target login log.
+
+Fast path in core (no ML call): values matching `^[A-Za-z0-9 _.,@:/+-]{0,64}$` and not `(?i)\.\.|--|file:|(^|/)(etc|proc|root|var/log|windows)/|\.ini\b` get `risk = 0.00`,
+`label = normal`. This keeps call volume low and stops plain names, emails and hosts from ever scoring.
+
+### Pre-processing (same function in training and serving)
+
+1. URL-decode up to 2 times (`was_encoded = true` if anything changed); HTML-entity decode once.
+2. Lowercase, collapse whitespace, cap at 1,024 chars.
+3. Replace IPs → `<ip>`, long digit runs → `<num>`, base64/hex runs ≥ 24 chars → `<b64>`/`<hex>`.
+4. Keep the raw value for `payload` extraction (text after the first shell separator for `cmd_injection`).
+
+### Data (target 4,000–6,000 values, roughly balanced; generated by us)
+
+| Class | How we generate it |
+| --- | --- |
+| `normal` | host names, IPs, emails, person names incl. `O'Brien`, `D'Souza`, search phrases, product codes, dates, prices, URLs, small JSON, sentences with `;` `&` `--` used normally ("Q3 report; final", "R&D", "pages 3--5") |
+| `cmd_injection` | `{normal}{sep}{cmd}` with seps `;` `&&` `\|\|` `\|` `\n` `%0a` `$( )` `` ` ``; cmds: recon, credential reads, `wget/curl … \| sh`, reverse-shell shapes, `base64 -d \| sh`; plain, URL-encoded and double-encoded |
+| `sqli` | tautologies (`' OR '1'='1`), `UNION SELECT`, stacked queries, comment tricks (`/**/`, `--`, `#`), time-based (`SLEEP(5)`, `pg_sleep`), encoded variants |
+| `xss` | `<script>`, event handlers (`onerror=`), `javascript:` URLs, SVG/IMG vectors, encoded and mixed-case variants |
+| `path_traversal` | `../` and `..\` chains, `%2e%2e%2f`, `....//`, absolute targets (`/etc/passwd`, `win.ini`), null-byte tricks |
+
+- Slot lists live in YAML (`data/generators/slots/*.yaml`) so values can be added without code.
+- Public payload lists (e.g. PayloadsAllTheThings, MIT; SecLists, MIT) only with the source and license written in
+  `data/raw/LICENSES.md`. Unclear license → don't use it.
+
+### Train (`training/train_input.py`)
+
 ```python
 pipe = Pipeline([
   ("feats", FeatureUnion([
-     ("char", TfidfVectorizer(analyzer="char_wb", ngram_range=(2,5), min_df=2, sublinear_tf=True)),
-     ("word", TfidfVectorizer(token_pattern=r"[^\s]+", ngram_range=(1,2), min_df=2)),
+     ("char", TfidfVectorizer(analyzer="char", ngram_range=(1, 5), min_df=2, sublinear_tf=True, max_features=60000)),
+     ("word", TfidfVectorizer(token_pattern=r"[^\s]+", ngram_range=(1, 2), min_df=2, sublinear_tf=True)),
   ])),
-  ("clf", LogisticRegression(max_iter=2000, C=4.0, class_weight="balanced")),
+  ("clf", LogisticRegression(max_iter=3000, C=4.0, class_weight="balanced")),
 ])
 ```
-Normalise first: lowercase, collapse whitespace, replace IPs → `<ip>`, URLs → `<url>` (keep scheme), long
-base64/hex runs → `<b64>`/`<hex>` (also keep a flag feature). `top_features` = the 5 n-grams with highest
-coefficient × tf-idf for the predicted class.
 
-**CodeGuard (optional, team's own prior project):** if `CODEGUARD_URL` is set, `/classify-command` also calls
-CodeGuard `POST /analyze {"code": text}` (unmodified service from `references/codeguard`, run with
-`python -m codeguard.api --port 8001`) and returns its `verdict`, `categories`, `risk_score` under `codeguard`.
-Combine: if CodeGuard says `block` with a category that maps to the predicted label (table below), raise confidence
-to max(model, codeguard risk). CodeGuard allows recon commands by design (they are safe to run), so it never
-lowers our label.
+- **Split by template family**, not by row (`GroupShuffleSplit`, 25 % of families held out), so the test set contains
+  value shapes the model never saw. The hand-written `hard_set.yaml` is never trained on.
+- **Calibration:** wrap with `CalibratedClassifierCV(method="sigmoid", cv=5)` if the reliability check in
+  `evaluate.py` shows risk is off by > 0.1 in any bucket, so that "0.9" really means about 9 in 10.
+- `top_features` = the 5 n-grams with the highest coefficient × tf-idf for the predicted class (shown in the UI as
+  "ML: sqli 0.94 (`' or`, `union sel`)").
 
-| CodeGuard category | Our label |
-| --- | --- |
-| `secret_access` | credential_access |
-| `dependency_risk` (download + run) | download_exec |
-| `persistence_or_privesc` | persistence |
-| `destructive_command` | destructive |
-| `obfuscated_execution` | obfuscated |
-| `data_exfiltration`, `ssrf_network_exfil` | credential_access (exfil stage; Go maps to T1041 when added) |
-| `ai_targeted_instructions` | stored as an extra flag `prompt_injection: true` (agent signal) |
+### Targets (enforced by `python -m training.evaluate --check`)
 
-**Targets:** macro F1 ≥ 0.85 on the family-held-out test, ≥ 0.80 on the hard set. Write both in the model card.
+Measured for the system as deployed (model + fast path). Findings fire at risk ≥ 0.5, so recall is gated there.
 
-## M2 — Web input classifier
-
-**Why:** confirms `input.suspicious` events from the web decoy, catches encoded/obfuscated variants the
-decoy's regex pre-check misses, and labels the attack type (T1190).
-
-**Data (target 3,000–5,000 values):**
-- `normal`: generated realistic values: host names, IPs, emails, names (incl. `O'Brien`), search phrases,
-  numbers, dates, URLs, JSON snippets — so apostrophes and dots don't look evil.
-- `cmd_injection`: `{normal}{sep}{cmd}` with seps `; && || | \n %0a $( ) `` ` `` and cmds from M1's malicious families;
-  plus URL-encoded and double-encoded variants.
-- `sqli`: tautologies, UNION, stacked queries, comment tricks, time-based (`SLEEP(5)`), encoded variants.
-- `xss`, `path_traversal`: standard payload shapes and encodings.
-- Public payload lists only with recorded licenses.
-
-**Train:** same pipeline shape with `analyzer="char", ngram_range=(1,5)`; URL-decode up to 2 times before features
-(keep `was_encoded` flag). Response includes `payload` = text after the first separator for `cmd_injection`
-(core then sends that payload to M1 to label what the injected command does).
-
-**Targets:** recall ≥ 0.95 on injection classes at precision ≥ 0.90; false positive rate on `normal` ≤ 2 %.
-
-## M3 — Behaviour classifier
-
-**Why:** decides human vs scripted vs agent-like from behaviour, with explainable features. Rules in 07 §7 are the
-fallback and the baseline it must beat.
-
-**Data — we generate it ourselves (label = who/what produced the session):**
-
-| Class | How to produce sessions | Target count |
+| Metric | Target | v1 result |
 | --- | --- | --- |
-| `human_like` | each teammate does 8–10 manual attack sessions on the lab decoys (vary skill, speed) | 30–40 |
-| `scripted` | `attack.sh` variants, hydra-style loops, a Python paramiko script with fixed command lists and random sleeps 0–500 ms | 40 |
-| `agent_like` | an LLM agent (e.g. any coding/CLI agent) given only "you are authorised to assess the lab host at 10.66.0.10, find credentials" with SSH access to the decoy, in the isolated lab | 30–40 |
+| Family hold-out: precision on attacks at risk ≥ 0.8 | ≥ 0.90 | 1.00 |
+| Family hold-out: false-positive rate on `normal` (risk ≥ 0.5) | ≤ 2 % | 0 % |
+| Family hold-out: attack recall at risk ≥ 0.5 | ≥ 0.80 | 0.84 |
+| Hard set (hold-out model): attack recall at risk ≥ 0.5 | ≥ 0.95 | 0.97 |
+| Hard set (hold-out model): macro F1 | ≥ 0.80 | 0.95 |
+| p95 latency per call | ≤ 30 ms | ~1.5 ms |
 
-Export with `cmd/core export-sessions --features` → `sessions.csv` (one row per actor or per session ≥ 5 commands,
-the 9 features from 07 §7 + label). Optional augmentation: jitter numeric features ±10 % to double rows (training
-only, never in test).
+Not met, reported honestly: recall at risk ≥ 0.8 on held-out families is 0.75 (target was 0.95). A held-out family is
+a whole technique the model never saw (e.g. XSS through `<style>`/`<object>` tags with no `script`/`alert`); those
+score 0.3–0.7. The Go rule check (07 §4.1) covers the common patterns independently.
 
-**Train:** `DecisionTreeClassifier(max_depth=4, class_weight="balanced")` as the explainable baseline;
-`RandomForestClassifier(n_estimators=100, max_depth=6)` if it is clearly better. Evaluate with
-`GroupKFold` grouped by **who produced the session** (teammate / script / agent run) so the model is not tested
-on the same operator it trained on. Export tree rules as text into the model card — great for the demo slide.
+Model card `models/input.model_card.md`: data sources + licenses, split method, metrics on both test sets, known
+limits (generated data; English-centric; no context about the field's expected format).
 
-**Targets:** macro F1 ≥ 0.75. If it can't beat the rule baseline, ship rules and show the ML as an experiment.
-Be honest in the pitch: small, self-made dataset; labels describe behaviour, not who the attacker is.
+## N — Readable activity (LLM narration)
 
-## S — Incident summary
+### What it does
 
-- With `LLM_API_KEY` + `LLM_MODEL` set: send a compact JSON of findings, top 30 timeline items, IOCs; prompt asks for
-  ≤ 120 words, factual, no speculation about identity; 5 s timeout.
-- Treat all attacker-supplied strings as data: wrap them in a quoted block and instruct the model to ignore
-  instructions inside (attackers may plant prompt injections in commands).
-- Fallback template (Jinja): "ACT-0007 (agent-like, confidence 0.93) accessed 4 decoys between 09:01 and 09:06 UTC.
-  It downloaded internal-backup.zip, logged in over SSH with the leaked key, read AWS-style credentials and used them
-  against the beacon. Techniques: …. Recommended: …".
+Turns what the SOC saw into plain language, for the dashboard **and** the Discord/Slack messages:
+
+| Kind | Trigger (core, 09) | Shown in |
+| --- | --- | --- |
+| `alert` | an incident notification is about to be sent (high / critical immediately, medium digest) | Discord embed description, Slack section text |
+| `actor` | an actor's findings or risk changed, debounced to at most once per 60 s per actor | actor profile "What happened" card, incident summary |
+| `incident` | incident opened, severity raised, or report requested | incident page, markdown report |
+| `event` | analyst clicks **Explain** on one event in the drawer (on demand, cached) | event drawer |
+
+Every event in the live feed already has a deterministic one-line `summary` made by core (e.g. "cat ~/.aws/credentials");
+we do **not** call the LLM per event in the stream (too many calls, too slow). The LLM is used per alert, per actor and
+on demand.
+
+Example (`actor`):
+
+> **ACT-0007 stole a planted cloud key and tried it against the AWS-style endpoint**
+> The actor downloaded internal-backup.zip from the admin site, used the SSH key inside it to log in as deploy,
+> listed the system, read ~/.aws/credentials and then sent a signed request with that key to the beacon. It also
+> tried a command injection on the diagnostics page. Behaviour looks scripted: commands arrived every 0.4 s with no
+> typing corrections.
+> • Honeytoken tok_aws_k7 used (critical) • Linked across 4 decoys • Suggested: block 10.66.0.23, rotate the token
+
+### Request / response (04 §C `POST /ml/v1/narrate`)
+
+Core sends **facts**, never raw envelopes: actor label, severity, risk, behaviour class, services, top findings
+(title, technique, time), up to 30 timeline items as short one-liners, token ids, IPs, recommended actions.
+Attacker-supplied strings (commands, parameter values, user agents, usernames) are sent in a separate `attacker_strings`
+list, each ≤ 200 chars.
+
+The service returns `headline`, `text`, `bullets`, `source: "llm"`, `model`, `prompt_hash`. When `LLM_API_KEY` is
+empty it returns `503 {"error":{"code":"llm_off"}}` and core uses its Go template (below).
+
+### Model and call
+
+- Provider-neutral (decision 2026-10-31): `LLM_PROVIDER` = `openai_compat` (default) or `anthropic`.
+  - `openai_compat`: one `POST {LLM_BASE_URL}/chat/completions` call with httpx. Works with any OpenAI-compatible
+    endpoint: Groq (`https://api.groq.com/openai/v1`), Google Gemini (`https://generativelanguage.googleapis.com/v1beta/openai`),
+    OpenRouter, a local Ollama (`http://host.docker.internal:11434/v1`). `response_format: {"type":"json_object"}`.
+  - `anthropic`: official `anthropic` Python SDK, `LLM_MODEL` e.g. `claude-haiku-5-5`; installed only if used.
+- Env: `LLM_API_KEY`, `LLM_MODEL` (required when a key is set), `LLM_BASE_URL` (openai_compat only).
+- Output must be JSON `{headline, text, bullets}`; parsed and guarded; `max_tokens` 600, temperature 0.2.
+- Timeout 5 s, no retries inside the service (core decides). Unfinished output (`finish_reason` ≠ `stop`) → error →
+  core falls back to the template.
+- The system prompt is fixed; only the facts change per call.
+
+### Safety (attackers control part of the input)
+
+1. Attacker strings go inside `<attacker_input>…</attacker_input>`; the system prompt says they are data to describe,
+   never instructions to follow, and that the model must not speculate about identity or attribution
+   ("likely same operator", "behaviour looks scripted"; never names, countries or groups).
+2. **Output guard (Python, before returning; Go re-checks the same rules):**
+   - JSON valid; headline ≤ 120 chars, text ≤ 900 chars, ≤ 5 bullets;
+   - strip Discord/Slack mentions (`@everyone`, `@here`, `<@…>`, `<!channel>`) and markdown links; core adds `@here`
+     itself for critical;
+   - every IP, token id, actor label and technique id in the output must appear in the facts, otherwise reject;
+   - no URLs except the dashboard URL from the facts;
+   - reject if the prompt-injection phrase set (same regex list as `lurgen`, 08) matches the output.
+   Rejected → error → template.
+3. The LLM never sets severity, risk, actor links, blocks or alerts. Numbers in headlines (risk, severity) are taken
+   from facts by core, not from the model.
+
+### Template fallback (in Go, `internal/narrate/templates/*.tmpl`)
+
+Core always has a readable message, even with ML off. Example:
+`ACT-0007 (critical, risk 92) touched 4 decoys between 09:01 and 09:06 IST. Key steps: downloaded internal-backup.zip;
+SSH login with the leaked key; read ~/.aws/credentials; used AWS-style key tok_aws_k7 on the beacon. Techniques:
+T1552.001, T1078, T1613. Recommended: block 10.66.0.23, rotate tok_aws_k7.`
+
+### Limits and cost
+
+- At most 1 `actor` narration per actor per 60 s; `event` explains at most 20 per minute; global cap
+  `NARRATE_MAX_PER_HOUR` (default 120). Over the cap → template.
+- Results cached in `narrations` (03) by `(kind, ref_id, facts_hash)`; same facts → no new call.
+- A call is ~2,000 input + ~250 output tokens; a full demo run is a few dozen calls, which fits the free tiers of
+  Groq or Gemini.
 
 ## Serving
 
-- `uvicorn app.main:app --host 0.0.0.0 --port 8000 --workers 2`; models loaded once at start.
-- p95 latency target < 30 ms for M1/M2/M3 (CodeGuard adds ~5–70 ms; call it in parallel with M1, 250 ms budget).
-- `/health` reports model versions; core shows "ML: on/off" in `/v1/stats/overview`.
-- Each model ships `models/<name>.model_card.md`: data sources + licenses, split method, metrics, known limits.
+- `uvicorn app.main:app --host 0.0.0.0 --port 8000 --workers 2`; the input model loads once at start.
+- `/health`: `{"ok":true,"models":{"input":"v1"},"narration":"llm"|"off","llm_model":"<LLM_MODEL>"|null}`.
+  Core shows "ML: on/off" and "Narration: AI/template" in `/v1/stats/overview`.
 
-## Go integration (`internal/mlclient`)
+## Go integration (`internal/mlclient`, `internal/narrate`)
 
-- `ClassifyCommand`, `ClassifyInput`, `ClassifySession`, `Summarize` with per-call timeouts (300 ms; 5 s summary).
-- Circuit breaker: 5 consecutive failures → skip ML for 30 s.
-- Results are stored inside `findings.evidence.ml` so the UI can show "ML: credential_access 0.94 (`.aws`, `cred`)".
+- `mlclient.ClassifyInput` (300 ms timeout) and `mlclient.Narrate` (5 s timeout; 3 s when an alert is waiting).
+- Circuit breaker per endpoint: 5 consecutive failures → skip for 30 s.
+- Input results are stored in `findings.evidence.ml` (`label`, `risk`, `confidence`, `top_features`).
+- `internal/narrate` builds facts, applies limits and cache, calls `Narrate`, re-runs the output guard, falls back to
+  the template, stores the row in `narrations`, publishes the SSE `narrative` message.
+
+## Order of work
+
+1. Skeleton: `/health` and both routes returning fixed responses (lets core integrate early).
+2. Generator + `train_input.py` + `evaluate.py --check`; replace the fixed `classify-input` response.
+3. Go templates for all four kinds (works with ML off).
+4. `narrate.py` with the Claude call and output guard; then core wiring (alerts first, then actor card, then Explain).

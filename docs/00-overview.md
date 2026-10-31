@@ -12,12 +12,13 @@ together, warn the security team and let an analyst respond.
 2. **Record** — the decoy sends every login, command, file read and API call to the Go core as an event.
 3. **Analyse** — the core asks:
    - Is this the same attacker as before? (correlation → *actor*)
-   - What are they doing? (rules + ML → MITRE ATT&CK technique)
+   - What are they doing? (rules → MITRE ATT&CK technique; one ML model scores typed inputs 0–1)
    - How dangerous? (risk score 0–100)
    - Human, script or AI agent? (behaviour class)
 4. **Adapt** — the maze shows new fake lures that match the attacker's interest (Kubernetes, database …),
    within strict limits.
-5. **Alert** — high and critical activity posts to Discord (and Slack).
+5. **Alert** — high and critical activity posts to Discord (and Slack), written in plain English by an LLM
+   (template if the LLM is off).
 6. **Respond** — the analyst sees the full timeline in the dashboard and blocks the attacker (lab only).
 
 ## What is in scope for the hackathon
@@ -29,7 +30,7 @@ together, warn the security team and let an analyst respond.
 | Correlation, rules, MITRE, risk, timelines | Traffic interception / TLS MITM |
 | Discord + Slack alerts, incidents, lab-only response | Blocking on real networks |
 | Adaptive maze with bounded loops | Unbounded or infinite deception |
-| 3 ML models + incident summary (all optional at runtime) | Deep learning |
+| 1 input-risk model + LLM plain-English narration (both optional at runtime) | Deep learning, command/behaviour models |
 
 ## Team (4 people)
 
@@ -38,6 +39,6 @@ together, warn the security team and let an analyst respond.
 | P1 Backend lead | Claude Code | Go core: ingest, store, intel engine, maze, alerting, analyst API |
 | P2 Frontend | Antigravity | Next.js SOC dashboard |
 | P3 Decoys + infra | any | Go decoys, honeytokens, Docker, network isolation, attack script |
-| P4 ML + demo | any | FastAPI service, 3 models, CodeGuard integration, datasets, demo rehearsal |
+| P4 ML + demo | any | FastAPI service, input-risk model, LLM narration, datasets, demo rehearsal |
 
 If P3 and P4 are combined or split differently, keep the ownership table in `14-milestones-and-team.md` current.

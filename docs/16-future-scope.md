@@ -54,6 +54,9 @@ hard overrides on top, and weights nudged only by analyst feedback (07 §6). It 
 | --- | --- |
 | Per-user behaviour baselines (UEBA style) from identity and auth logs | needs weeks of real user history |
 | Trained behaviour classifier (human / script / AI agent) | needs labelled human and agent sessions; rules ship now |
+| Command-intent classifier for SSH commands (TF-IDF/LR, 7 labels) | removed 2026-10-31: template data mostly echoed the rules; revisit with real captured commands |
+| CodeGuard as a second opinion on commands / payloads | removed 2026-10-31 with the command model; built for code snippets, not single commands |
+| LLM narration per event in the live stream | too many calls; ships per alert / actor / on-demand Explain |
 | Gradient-boosted risk model over raw features | next step after the MLP if real data grows |
 | More decoys: Jenkins, real DB wire protocol, MCP/LLM decoy | effort vs 24 h |
 | HASSH / JA4 client fingerprints | raw protocol parsing |

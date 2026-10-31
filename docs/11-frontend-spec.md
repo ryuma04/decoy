@@ -21,7 +21,9 @@ native `EventSource` for SSE. No other state library: React state + a small SSE 
 
 - Dark SOC theme by default, light theme toggle. Left sidebar: Overview, Live events, Actors, Incidents,
   Maze, Honeytokens, Sensors. Top bar: global search (IP / actor label / token), live indicator (SSE connected),
-  ML on/off badge, user menu.
+  "ML: on/off" badge (`Overview.ml_input`), "Narration: AI/template" badge (`Overview.narration`), user menu.
+- Any text from the LLM carries a small "AI-written" label with the model name on hover; template text carries
+  "template". Never render narration as HTML (plain text + bullets only).
 - Severity colours (use as Tailwind tokens): low = slate/blue, medium = amber, high = orange, critical = red.
   Always pair colour with text label (accessibility).
 - Behaviour class badges: human-like, scripted, AI-assisted, agent-like, unknown (icons + text).
@@ -42,7 +44,10 @@ Email + password → `POST /api/auth/login`. Redirect to `/`. Middleware redirec
 
 ### `/events` Live events
 Table: time, service, type, actor, src IP, summary, tokens. Filters: service, type, actor, IP, free text, time range.
-Cursor pagination. New SSE events prepend when filters match. Row click → drawer with raw envelope JSON (pretty).
+Cursor pagination. New SSE events prepend when filters match. Row click → drawer with raw envelope JSON (pretty)
+and an **Explain** button → `GET /api/events/{id}/explain` → shows the `Narrative` above the JSON (spinner up to 5 s;
+template text on failure). Findings from the input-risk model show "ML: sqli 0.94 (`' or`, `union sel`)" and an
+"encoded" chip when `was_encoded`.
 
 ### `/actors` Actors
 Table: label, risk (bar), severity, confidence, behaviour badge, services (icons), sessions, IPs, top techniques,
@@ -51,6 +56,8 @@ last seen. Sort by risk / last seen. Live updates from `actor` SSE messages.
 ### `/actors/[id]` Actor profile (the most important page for the demo)
 1. Header: label, severity pill, risk gauge 0–100, confidence ("likely same operator · 0.93"), behaviour badge,
    first/last seen, link to incident.
+1b. **What happened** card directly under the header: `ActorDetail.narrative` headline (large), text, bullets,
+   source label, "updated 20 s ago". Replaced live by SSE `narrative` messages. Empty state: "Not enough activity yet".
 2. **Linked sessions graph** (React Flow): one node per session (service icon, IP, start time); edges labelled with
    link reasons (e.g. "same SSH key", "used token from session 2"). Below, the sessions table with link score.
 3. **Attack timeline**: vertical, merged events + findings + maze unlocks, grouped by session colour; findings
@@ -71,7 +78,8 @@ last seen. Sort by risk / last seen. Live updates from `actor` SSE messages.
 
 ### `/incidents` and `/incidents/[id]`
 - List: severity, title, actor, status, opened, updated. Filter by status/severity.
-- Detail: summary (badge "AI summary" or "template"), status selector (open/ack/contained/closed), notes,
+- Detail: summary from `IncidentDetail.narrative` (badge "AI summary" or "template"; same text that went to
+  Discord/Slack), status selector (open/ack/contained/closed), notes,
   findings table, IOCs table (copy button, export CSV), recommended actions with buttons
   (`block_ip`, `kill_session`, `rotate_token`) behind a confirm dialog stating "lab environment only";
   action history; "Download report (.md)".
@@ -97,6 +105,7 @@ Cards: sensor id, service, version, last heartbeat, status (ok / silent). Silent
 
 `src/lib/stream.tsx`: one `EventSource('/api/stream')` in a context provider; auto-reconnect with backoff;
 exposes `useStream(eventName, handler)`. Show a "Live" dot (green connected, amber reconnecting).
+Handles the `narrative` message (actor profile card, incident page).
 
 ## Quality bar
 

@@ -1,0 +1,12 @@
+fastapi>=0.115,<1
+uvicorn>=0.34,<1
+scikit-learn>=1.5,<2
+joblib>=1.4
+pandas>=2.2
+numpy>=1.26
+pyyaml>=6
+httpx>=0.27,<1
+# optional, only when LLM_PROVIDER=anthropic:
+# anthropic
+# tests:
+pytest>=8

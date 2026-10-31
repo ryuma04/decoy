@@ -234,6 +234,23 @@ CREATE TABLE deception_tactics (
   ts          timestamptz NOT NULL DEFAULT now()
 );
 
+CREATE TABLE narrations (                       -- readable activity (10 §N): LLM text or Go template
+  narration_id bigserial PRIMARY KEY,
+  kind        text NOT NULL,                   -- alert | actor | incident | event
+  ref_id      text NOT NULL,                   -- actor_id / incident_id / event_id
+  facts_hash  text NOT NULL,                   -- sha256 of the facts sent; same facts → reuse
+  headline    text NOT NULL,
+  body        text NOT NULL,
+  bullets     jsonb NOT NULL DEFAULT '[]',
+  source      text NOT NULL,                   -- llm | template
+  model       text,                            -- e.g. llama-3.3-70b-versatile; null for template
+  prompt_hash text,
+  guard       jsonb,                           -- {"ok":true,"checks":{"mentions":"stripped","unknown_ip":false,...}}
+  created_at  timestamptz NOT NULL DEFAULT now(),
+  UNIQUE (kind, ref_id, facts_hash)
+);
+CREATE INDEX narrations_ref ON narrations(kind, ref_id, created_at DESC);
+
 CREATE TABLE recovery_plans (
   recovery_id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
   actor_id    uuid REFERENCES actors,

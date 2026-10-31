@@ -25,13 +25,29 @@ type Notifier interface { Notify(ctx context.Context, n Notification) error }
 Implementations: `discord.go`, `slack.go`, `log.go` (always on). Webhook failures retry 3× with backoff and
 never block the engine (own goroutine + queue).
 
+### Readable message text (LLM narration, 10 §N)
+
+Every notification carries a plain-English headline and story so the person reading Discord/Slack does not have to
+decode event types:
+
+1. Before sending, the notifier asks `internal/narrate` for kind `alert` (facts: actor, severity, risk, services, last
+   findings and timeline one-liners, tokens, IPs, recommended actions; attacker strings separately).
+2. Wait at most **3 s**. If the LLM text is ready and passes the output guard, use it; otherwise use the Go template
+   immediately. An alert is never delayed more than 3 s and never lost because of the LLM.
+3. The narration becomes the embed `title` (headline, prefixed by core with the severity word, e.g. `CRITICAL —`) and
+   `description` (text + bullets). Structured fields (Risk, Behaviour, Services, ATT&CK) stay deterministic from core.
+4. Mentions: core strips any mention from the narration and adds `@here` itself only for critical.
+5. The same narration is stored in `narrations`, shown on the incident page and used for the digest line of medium
+   incidents (one headline per incident).
+
 ### Discord payload
 
 ```json
 {
   "content": "@here",
   "embeds": [{
-    "title": "CRITICAL — Honeytoken used by ACT-0007",
+    "title": "CRITICAL — ACT-0007 stole a planted cloud key and tried it against the AWS-style endpoint",
+    "description": "The actor downloaded internal-backup.zip from the admin site, used the SSH key inside it to log in as deploy, read ~/.aws/credentials and sent a signed request with that key to the beacon. Behaviour looks scripted.\n• Honeytoken tok_aws_k7 used\n• Linked across 4 decoys\n• Suggested: block 10.66.0.23, rotate tok_aws_k7",
     "url": "http://localhost:3000/incidents/c1f…",
     "color": 15158332,
     "fields": [
@@ -42,13 +58,14 @@ never block the engine (own goroutine + queue).
       {"name": "Recent activity", "value": "• downloaded internal-backup.zip\n• SSH login with leaked key\n• cat ~/.aws/credentials\n• kubectl get secrets\n• AWS API call with lure key"},
       {"name": "ATT&CK", "value": "T1552.001, T1078, T1613"}
     ],
-    "footer": {"text": "Deception SOC · lab environment"},
+    "footer": {"text": "Deception SOC · lab environment · text: AI (llama-3.3-70b-versatile)"},
     "timestamp": "2026-11-14T09:05:40Z"
   }]
 }
 ```
 
-Colours: low 3447003, medium 16776960, high 15105570, critical 15158332. Slack uses Block Kit with the same fields.
+Colours: low 3447003, medium 16776960, high 15105570, critical 15158332. Slack uses Block Kit with the same fields
+(header = headline, section = text + bullets). Footer says `text: AI (<model>)` or `text: template`.
 
 ## Response actions (`internal/response`) — lab only
 
@@ -108,7 +125,7 @@ and the ticket appears there. Full automatic replay without user confirmation is
 `GET /v1/incidents/{id}/report?format=md` returns:
 
 1. Header: incident id, actor label, severity, risk, status, time range.
-2. Summary (ML summary if available, else template from findings).
+2. Summary: the latest `incident` narration (LLM if available, else Go template), labelled with its source.
 3. ATT&CK table: technique, name, tactic, evidence count, first seen.
 4. Timeline (top 50 items).
 5. Linked sessions with link reasons.

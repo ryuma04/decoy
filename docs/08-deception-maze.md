@@ -124,7 +124,7 @@ event → rules/findings → maze controller (path) → cognitive layer (present
 
 ## LLM dynamic lures — "smart honeypot" (`internal/lurgen`)
 
-An LLM (Gemini Flash by default; provider set by `LLM_PROVIDER`/`LLM_API_KEY`) writes **extra decoy content** for an
+An LLM (Claude via the same `LLM_API_KEY` / `LLM_MODEL` as narration, 10 §N) writes **extra decoy content** for an
 actor's theme: one more admin page, a migration-notes document, a config file. Goal: the honeypot looks alive and
 specific to what the attacker is hunting, which lengthens engagement and improves profiling.
 

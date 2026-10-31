@@ -26,7 +26,7 @@ docker compose run --rm attacker /scripts/attack.sh   # authorised demo attack, 
 | [07-intelligence-engine](docs/07-intelligence-engine.md) | Fingerprints, correlation, rules, MITRE, risk, behaviour |
 | [08-deception-maze](docs/08-deception-maze.md) | Adaptive maze graph, algorithm, limits |
 | [09-alerting-response](docs/09-alerting-response.md) | Incidents, Discord/Slack, response actions, reports |
-| [10-ml-service](docs/10-ml-service.md) | The three ML models, data, training, serving |
+| [10-ml-service](docs/10-ml-service.md) | Input-risk model and LLM narration: data, training, serving |
 | [11-frontend-spec](docs/11-frontend-spec.md) | Dashboard pages, components, data flows |
 | [12-infrastructure](docs/12-infrastructure.md) | Docker Compose, isolation, env vars |
 | [13-demo-and-testing](docs/13-demo-and-testing.md) | Attack script, tests, acceptance gates |

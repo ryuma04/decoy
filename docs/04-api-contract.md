@@ -85,6 +85,7 @@ Decoys refuse new connections from blocked IPs (TCP close), close killed session
 | GET | `/v1/stats/techniques` | `window=24h` | `{"items":[{"technique","name","tactic","count"}]}` |
 | GET | `/v1/events` | `type, service, actor_id, session_id, src_ip, since, until, q, limit≤200, cursor` | list of `Event` |
 | GET | `/v1/events/{event_id}` | | `Event` with `envelope` |
+| GET | `/v1/events/{event_id}/explain` | | `Narrative` (plain-English explanation, cached; LLM or template, 10 §N) |
 | GET | `/v1/actors` | `severity, behaviour_class, since, sort=risk\|last_seen, limit, cursor` | list of `ActorSummary` |
 | GET | `/v1/actors/{actor_id}` | | `ActorDetail` |
 | GET | `/v1/actors/{actor_id}/timeline` | `limit≤1000, cursor` | list of `TimelineItem` |
@@ -121,6 +122,7 @@ Decoys refuse new connections from blocked IPs (TCP close), close killed session
 | `incident` | `Incident` (on open, update, severity change) |
 | `maze` | `{"actor_id","node_id","state","reason"}` |
 | `sensor` | `Sensor` (status change) |
+| `narrative` | `{"kind": "actor" \| "incident", "ref_id", "narrative": Narrative}` (new plain-English text) |
 
 Optional query `?actor_id=` filters to one actor.
 
@@ -142,6 +144,13 @@ export interface Overview {
   open_incidents: Record<Severity, number>;
   token_hits: number; sensors_ok: number; sensors_total: number;
   top_actor: ActorSummary | null;
+  ml_input: boolean;                  // input-risk model reachable
+  narration: "llm" | "template";      // readable activity source right now
+}
+
+export interface Narrative {
+  headline: string; text: string; bullets: string[];
+  source: "llm" | "template"; model: string | null; generated_at: string;
 }
 
 export interface Event {
@@ -174,12 +183,13 @@ export interface Finding {
   finding_id: number; actor_id: string; session_id: string; rule_id: string; title: string;
   tactic: string | null; technique: string | null; technique_name: string | null;
   stage: Stage; points: number; confidence: number; source: "rule" | "ml" | "rule+ml";
-  evidence: { event_ids: string[]; matched?: string; ml?: { label: string; confidence: number; top_features: string[] } };
+  evidence: { event_ids: string[]; matched?: string;
+              ml?: { label: string; risk: number; confidence: number; top_features: string[]; was_encoded: boolean } };
   ts: string;
 }
 
 export interface BehaviourDetail {
-  class: BehaviourClass; scores: Partial<Record<BehaviourClass, number>>; source: "rules" | "ml";
+  class: BehaviourClass; scores: Partial<Record<BehaviourClass, number>>; source: "rules";
   features: { median_gap_ms: number; gap_cv: number; edit_rate: number; paste_rate: number;
               output_dependence: number; services_visited: number; breadcrumbs_followed: number;
               param_mutation_retries: number; commands: number };
@@ -203,6 +213,7 @@ export interface ActorDetail extends ActorSummary {
   sessions: Session[]; fingerprints: Fingerprint[]; findings: Finding[];
   behaviour: BehaviourDetail; interest: Record<"cloud" | "k8s" | "db" | "ci", number>;
   incident_id: string | null;
+  narrative: Narrative | null;                  // "What happened" card
 }
 
 export type TimelineItem =
@@ -227,7 +238,7 @@ export interface ResponseAction {
   requested_by: string; ts: string;
 }
 export interface IncidentDetail extends Incident {
-  summary: string; summary_src: "template" | "llm"; actor: ActorSummary; findings: Finding[];
+  summary: string; summary_src: "template" | "llm"; narrative: Narrative | null; actor: ActorSummary; findings: Finding[];
   iocs: IOC[]; actions: ResponseAction[]; notes: { author: string; body: string; ts: string }[];
   recommended_actions: { action: string; target: string; why: string }[];
 }
@@ -248,11 +259,15 @@ export interface Sensor { sensor_id: string; service: Service; version: string; 
   "ips": ["10.66.0.23","10.66.0.41"], "top_techniques": ["T1552.001","T1078","T1613"], "token_hits": 2, "maze_depth": 4,
   "sessions": [{"session_id":"…","service":"ssh","src_ip":"10.66.0.41","link_score":0.93,
     "link_reasons":[{"signal":"credential_lineage","weight":0.9,"matched_session":"…","value":"tok_backup_key"}]}],
-  "behaviour": {"class":"agent_like","scores":{"agent_like":0.71,"scripted":0.18,"human_like":0.11},"source":"ml",
+  "behaviour": {"class":"agent_like","scores":{"agent_like":0.71,"scripted":0.18,"human_like":0.11},"source":"rules",
     "features":{"median_gap_ms":5400,"gap_cv":0.21,"edit_rate":0,"paste_rate":0.9,"output_dependence":0.62,
     "services_visited":4,"breadcrumbs_followed":3,"param_mutation_retries":5,"commands":27}},
   "interest": {"cloud":4,"k8s":9,"db":0,"ci":2},
-  "incident_id": "c1f…"
+  "incident_id": "c1f…",
+  "narrative": {"headline":"ACT-0007 stole a planted cloud key and tried it against the AWS-style endpoint",
+    "text":"The actor downloaded internal-backup.zip, used the SSH key inside it to log in as deploy, read ~/.aws/credentials …",
+    "bullets":["Honeytoken tok_aws_k7 used (critical)","Linked across 4 decoys"],
+    "source":"llm","model":"llama-3.3-70b-versatile","generated_at":"2026-11-14T09:05:52Z"}
 }
 ```
 
@@ -263,15 +278,32 @@ so UI work does not wait for the backend).
 
 ## C. ML API (core → ml)
 
-All calls: timeout 300 ms (summary: 5 s). Any error ⇒ core continues with rules only.
+Timeouts: `classify-input` 300 ms; `narrate` 5 s (3 s when an alert is waiting). Any error ⇒ core continues with
+rules (input) or its Go template (narration). Full spec: 10.
 
 | Method | Path | Request | Response |
 | --- | --- | --- | --- |
-| GET | `/health` | | `{"ok":true,"models":{"command":"v1","input":"v1","behaviour":"v1"},"codeguard":true}` |
-| POST | `/ml/v1/classify-command` | `{"text":"cat ~/.aws/credentials","context":{"service":"ssh","cwd":"/home/deploy"}}` | `{"label":"credential_access","confidence":0.94,"top_features":["aws/cred",".aws"],"codeguard":{"verdict":"block","categories":["secret_access"],"risk":0.8}}` |
-| POST | `/ml/v1/classify-input` | `{"param":"host","value":"8.8.8.8; cat /etc/passwd","context":{"path":"/api/diagnostics"}}` | `{"label":"cmd_injection","confidence":0.97,"top_features":["; cat","/etc/"],"payload":"cat /etc/passwd"}` |
-| POST | `/ml/v1/classify-session` | `{"features": BehaviourDetail.features}` | `{"class":"agent_like","scores":{"human_like":0.11,"scripted":0.18,"agent_like":0.71},"top_features":["output_dependence","gap_cv"]}` |
-| POST | `/ml/v1/summarize-incident` | `{"incident": IncidentDetail, "timeline": TimelineItem[]}` | `{"summary":"…","source":"llm"\|"template"}` |
+| GET | `/health` | | `{"ok":true,"models":{"input":"v1"},"narration":"llm","llm_model":"llama-3.3-70b-versatile"}` (`narration: "off"`, `llm_model: null` without a key) |
+| POST | `/ml/v1/classify-input` | `{"param":"host","value":"8.8.8.8%3B%20cat%20/etc/passwd","context":{"service":"web","path":"/api/diagnostics","field":"query"}}` | `{"label":"cmd_injection","risk":0.97,"scores":{"normal":0.03,"cmd_injection":0.95,"sqli":0.01,"xss":0.0,"path_traversal":0.01},"top_features":["; cat","/etc/"],"payload":"cat /etc/passwd","was_encoded":true}` |
+| POST | `/ml/v1/narrate` | `NarrateRequest` (below) | `{"headline","text","bullets":[],"source":"llm","model":"llama-3.3-70b-versatile","prompt_hash":"sha256:…","guard":{"urls":"defanged"}}`, or `503 {"error":{"code":"llm_off",…}}` (no key) / `502 {"error":{"code":"llm_error",…}}` (provider failed or guard rejected) |
 
-Labels — command: `benign, recon, credential_access, download_exec, persistence, destructive, obfuscated`.
-Input: `normal, cmd_injection, sqli, xss, path_traversal`. Session: `human_like, scripted, agent_like`.
+`risk = 1 − scores.normal` (0–1, 2 decimals). `payload` is set only for `cmd_injection` (text after the first shell
+separator, decoded), else `null`. `context.field` ∈ `query`, `form`, `json`, `path`, `username`.
+
+```ts
+interface NarrateRequest {
+  kind: "alert" | "actor" | "incident" | "event";
+  ref_id: string;                       // actor_id / incident_id / event_id
+  audience: "discord" | "slack" | "dashboard";
+  facts: {
+    actor_label: string | null; severity: Severity | null; risk_score: number | null;
+    behaviour_class: BehaviourClass | null; services: Service[]; ips: string[]; tokens: string[];
+    findings: { title: string; technique: string | null; ts: string }[];      // ≤ 15
+    timeline: { ts: string; line: string }[];                                // ≤ 30, core-made one-liners
+    recommended_actions: string[]; dashboard_url: string; touched_production: boolean;
+  };
+  attacker_strings: string[];           // raw attacker text (commands, values, UAs), each ≤ 200 chars, ≤ 20 items
+}
+```
+
+Labels — input: `normal, cmd_injection, sqli, xss, path_traversal`.

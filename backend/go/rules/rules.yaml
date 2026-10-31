@@ -1,0 +1,194 @@
+# Detection rules (07 §4). Our own format and content. A rule fires once per actor.
+# scope: event (per event) | session / actor (on feature change). stage: recon | access | post_access | lateral.
+# scale: input_risk (points × risk) | token_sensitivity (points × sensitivity / 3).
+
+- id: port_sweep
+  title: Port sweep across decoys
+  scope: event
+  stage: recon
+  when: { type: scan.detected }
+  technique: T1046
+  points: 5
+
+- id: password_guessing
+  title: Password guessing
+  scope: session
+  stage: access
+  when: { feature: failed_auths_5m, gte: 5 }
+  technique: T1110.001
+  points: 10
+
+- id: credential_stuffing
+  title: Credential stuffing (many username/password pairs)
+  scope: session
+  stage: access
+  when: { feature: distinct_pairs, gte: 5 }
+  technique: T1110.004
+  points: 10
+
+- id: interactive_shell
+  title: Interactive shell after successful login
+  scope: session
+  stage: access
+  when: { all: [{ feature: successful_logins, gte: 1 }, { feature: commands, gte: 1 }] }
+  technique: T1059.004
+  points: 10
+
+- id: system_discovery
+  title: System discovery commands
+  scope: event
+  stage: post_access
+  when:
+    type: shell.command
+    any:
+      - argv0_in: [uname, id, whoami, hostname, ps, uptime, w, lscpu, df, free, ifconfig, ip, netstat, ss]
+      - regex: 'cat\s+/etc/\S*release'
+  technique: T1082
+  points: 5
+
+- id: account_discovery
+  title: Account discovery
+  scope: event
+  stage: post_access
+  when:
+    type: shell.command
+    any:
+      - regex: '/etc/passwd|\bgetent\b|\blastlog\b'
+      - regex: '^\s*id\s+[A-Za-z_][\w.-]*'
+  technique: T1087.001
+  points: 5
+
+- id: cred_file_search
+  title: Searched for credential files
+  scope: event
+  stage: post_access
+  when:
+    type: shell.command
+    any:
+      - regex: '(find|grep|locate).*(pass|secret|token|\.aws|\.kube|\.env|id_rsa)'
+      - argv0_in: [cat, less, more, head, tail, strings, vi, vim, nano]
+        path_regex: '(\.aws/credentials|\.kube/config|kubeconfig|\.env|id_(rsa|ed25519)|db\.env|shadow)'
+  technique: T1552.001
+  points: 15
+
+- id: honeytoken_read
+  title: Read a planted honeyfile
+  scope: event
+  stage: post_access
+  when: { types: [file.read, file.download], honeyfile: true }
+  technique: T1552.001
+  points: 15
+
+- id: honeytoken_used
+  title: Used a planted honeytoken
+  scope: event
+  stage: lateral
+  when: { type: token.used }
+  technique: T1078
+  points: 30
+  scale: token_sensitivity
+
+- id: ingress_tool_transfer
+  title: Tried to download or upload tools
+  scope: event
+  stage: post_access
+  when:
+    types: [shell.command, file.upload]
+    any:
+      - argv0_in: [wget, curl, scp, sftp, tftp, ftp]
+      - regex: '\b(wget|curl|tftp)\b'
+      - event_type: file.upload
+  technique: T1105
+  points: 15
+
+- id: ssh_persistence
+  title: Wrote to SSH authorized_keys
+  scope: event
+  stage: post_access
+  when: { type: shell.command, regex: 'authorized_keys' }
+  technique: T1098.004
+  points: 20
+
+- id: cron_persistence
+  title: Cron persistence
+  scope: event
+  stage: post_access
+  when: { type: shell.command, regex: '\bcrontab\b|/etc/cron' }
+  technique: T1053.003
+  points: 20
+
+- id: obfuscated_command
+  title: Obfuscated or encoded command
+  scope: event
+  stage: post_access
+  when:
+    type: shell.command
+    any:
+      - regex: 'base64\s+(-d|--decode)'
+      - regex: '\beval\b'
+      - regex: '\\x[0-9a-fA-F]{2}'
+      - regex: 'printf\s+.*\\[0-7]{3}'
+  technique: T1027
+  points: 15
+
+- id: container_discovery
+  title: Kubernetes discovery
+  scope: event
+  stage: lateral
+  when:
+    type: k8s.api_call
+    any:
+      - data_regex: { verb: '^(list|get|watch)$', resource: '^(pods|nodes|namespaces|deployments|services)$' }
+  technique: T1613
+  points: 15
+
+- id: container_secrets
+  title: Read Kubernetes secrets
+  scope: event
+  stage: lateral
+  when: { type: k8s.api_call, data_regex: { resource: '^secrets$' } }
+  technique: T1552.007
+  points: 20
+
+- id: cmd_injection
+  title: Command injection attempt
+  scope: event
+  stage: access
+  when: { input_label: cmd_injection, input_risk_gte: 0.5 }
+  technique: T1190
+  points: 20
+  scale: input_risk
+
+- id: sqli_attempt
+  title: SQL injection attempt
+  scope: event
+  stage: access
+  when: { input_label: sqli, input_risk_gte: 0.5 }
+  technique: T1190
+  points: 15
+  scale: input_risk
+
+- id: xss_attempt
+  title: Cross-site scripting attempt
+  scope: event
+  stage: access
+  when: { input_label: xss, input_risk_gte: 0.5 }
+  technique: T1190
+  points: 10
+  scale: input_risk
+
+- id: path_traversal_attempt
+  title: Path traversal attempt
+  scope: event
+  stage: access
+  when: { input_label: path_traversal, input_risk_gte: 0.5 }
+  technique: T1190
+  points: 15
+  scale: input_risk
+
+- id: multi_decoy
+  title: Active on three or more decoy services
+  scope: actor
+  stage: lateral
+  when: { feature: services_visited, gte: 3 }
+  points: 15

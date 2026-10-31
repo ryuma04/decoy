@@ -5,7 +5,7 @@
 | Network | Members | Internet |
 | --- | --- | --- |
 | `decoy_net` | decoys, core, attacker (demo) | **none** (`internal: true`) |
-| `mgmt_net` | core, postgres, ml, codeguard, frontend | outbound only for Discord/Slack/LLM (core, ml) |
+| `mgmt_net` | core, postgres, ml, frontend | outbound only for Discord/Slack (core) and the LLM API (ml) |
 
 Decoys therefore cannot reach Postgres, the dashboard, ML, the Docker socket or the internet. Core is the only
 bridge. Core needs outbound internet for webhooks: attach it also to the default bridge network (`egress`), or run
@@ -57,15 +57,10 @@ services:
     pids_limit: 128
   # decoy-web (8080), decoy-k8s (6443), decoy-beacon (8088): same hardening block
 
-  ml:
+  ml:                   # input-risk model + LLM narration (10)
     build: ./ai-service/fastapi
-    environment: { CODEGUARD_URL: http://codeguard:8001, LLM_API_KEY: ${LLM_API_KEY:-} }
+    environment: { LLM_API_KEY: ${LLM_API_KEY:-}, LLM_MODEL: ${LLM_MODEL:-}, LLM_PROVIDER: ${LLM_PROVIDER:-openai_compat}, LLM_BASE_URL: ${LLM_BASE_URL:-} }
     networks: [mgmt_net, egress]
-
-  codeguard:            # optional; team's own prior project, run unmodified
-    profiles: [codeguard]
-    build: { context: ../references/codeguard, dockerfile: ../../deception-soc/infrastructure/docker/codeguard.Dockerfile }
-    networks: [mgmt_net]
 
   frontend:
     build: ./frontend/nextjs
@@ -95,8 +90,6 @@ services:
 Note on decoy ports: publishing decoy ports to the host is for the live demo from a laptop. On a shared or
 public network, unpublish them and attack only from the `attacker` container.
 
-`infrastructure/docker/codeguard.Dockerfile`: `FROM python:3.11-slim`, copy the repo, `CMD python -m codeguard.api --host 0.0.0.0 --port 8001`.
-It builds from `references/` without modifying it. Enable with `docker compose --profile codeguard up`.
 
 ## Dockerfiles
 
@@ -118,7 +111,11 @@ SCORER_LEARN=false
 DISCORD_WEBHOOK_URL=
 SLACK_WEBHOOK_URL=
 PERSONA_SEED=
-LLM_API_KEY=
+LLM_PROVIDER=openai_compat         # or anthropic
+LLM_BASE_URL=https://api.groq.com/openai/v1   # Gemini: https://generativelanguage.googleapis.com/v1beta/openai
+LLM_API_KEY=                       # empty = template narration only
+LLM_MODEL=llama-3.3-70b-versatile  # Gemini: gemini-2.5-flash
+NARRATE_MAX_PER_HOUR=120
 MAZE_ADAPTIVE=true
 ```
 
