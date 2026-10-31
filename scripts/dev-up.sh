@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# Start the Deception SOC locally (no Docker): ML service, core, SSH decoy, dashboard.
+# Start the Deception SOC locally (no Docker): ML service, core, every built decoy, dashboard.
 # Logs: .logs/<name>.log   Stop: scripts/dev-down.sh   Needs: .env (see .env.example), Go, Python, Node.
 set -euo pipefail
 ROOT="$(cd "$(dirname "$0")/.." && pwd)"
@@ -14,28 +14,45 @@ wait_for() { # name url
   echo "  $1 did not start; see .logs/$1.log"; return 1
 }
 
+# name:sensor-id:key-var:port for every decoy whose cmd exists (k8s joins automatically once it is built)
+DECOYS="ssh:ssh-01:KEY_SSH:2222 web:web-01:KEY_WEB:8080 beacon:beacon-01:KEY_BEACON:8088 k8s:k8s-01:KEY_K8S:6443"
+
 echo "[1/5] building Go binaries"
-(cd backend/go && go build -o bin/core.exe ./cmd/core && go build -o bin/decoy-ssh.exe ./cmd/decoy-ssh && go build -o bin/seed.exe ./cmd/seed)
+(cd backend/go && go build -o bin/core.exe ./cmd/core && go build -o bin/seed.exe ./cmd/seed \
+  && for d in $DECOYS; do n=${d%%:*}; [ -d "cmd/decoy-$n" ] && go build -o "bin/decoy-$n.exe" "./cmd/decoy-$n"; done; true)
 
 echo "[2/5] seed (persona + honeytokens)"
-(cd backend/go && ./bin/seed.exe > ../../.logs/seed.log 2>&1) && tail -1 .logs/seed.log
+if [ -f backend/go/seed/out/tokens.json ] && [ "${RESEED:-0}" != 1 ]; then
+  echo "  using existing seed (RESEED=1 scripts/dev-up.sh to generate new values)"
+else
+  (cd backend/go && ./bin/seed.exe > ../../.logs/seed.log 2>&1) && tail -1 .logs/seed.log
+fi
 
 echo "[3/5] ML service :8000"
+# Background jobs send ALL their output to log files, so they never hold this script's terminal open.
 (cd ai-service/fastapi && { [ -f models/input.joblib ] || { python -m data.generators.inputs && python -m training.train_input; }; } \
-  && nohup python -m uvicorn app.main:app --host 127.0.0.1 --port 8000 > ../../.logs/ml.log 2>&1 &)
+  && exec nohup python -m uvicorn app.main:app --host 127.0.0.1 --port 8000) > .logs/ml.log 2>&1 < /dev/null &
 wait_for ml http://127.0.0.1:8000/health
 
-echo "[4/5] core :8443 (sensors) :8090 (analyst) + SSH decoy :2222"
-(cd backend/go && nohup ./bin/core.exe serve > ../../.logs/core.log 2>&1 &)
+echo "[4/5] core :8443 (sensors) :8090 (analyst) + decoys"
+(cd backend/go && exec nohup ./bin/core.exe serve) > .logs/core.log 2>&1 < /dev/null &
 wait_for core http://127.0.0.1:8090/healthz
-(cd backend/go && SENSOR_ID=ssh-01 SENSOR_KEY="$KEY_SSH" CORE_URL=http://127.0.0.1:8443 LISTEN_ADDR=:2222 \
-  DATA_DIR="$ROOT/.data" SEED_DIR="$ROOT/backend/go/seed" nohup ./bin/decoy-ssh.exe > ../../.logs/decoy-ssh.log 2>&1 &)
-sleep 2; grep -m1 -iE "listening|error" .logs/decoy-ssh.log || true
+for d in $DECOYS; do
+  IFS=: read -r n sid keyvar port <<< "$d"
+  [ -f "backend/go/bin/decoy-$n.exe" ] || { echo "  decoy-$n not built yet, skipped"; continue; }
+  mkdir -p ".data/$n"
+  (cd backend/go && SENSOR_ID="$sid" SENSOR_KEY="${!keyvar}" CORE_URL=http://127.0.0.1:8443 LISTEN_ADDR=":$port" \
+    DATA_DIR="$ROOT/.data/$n" SEED_DIR="$ROOT/backend/go/seed" exec nohup "./bin/decoy-$n.exe") > ".logs/decoy-$n.log" 2>&1 < /dev/null &
+done
+sleep 3
+for d in $DECOYS; do n=${d%%:*}; [ -f ".logs/decoy-$n.log" ] && echo "  decoy-$n: $(grep -m1 -oiE 'listening[^,]*|error[^,]*' ".logs/decoy-$n.log" || echo 'starting')"; done
 
 echo "[5/5] dashboard :3000"
-(cd frontend/nextjs && { [ -d node_modules ] || npm install --no-audit --no-fund; } && nohup npm run dev > ../../.logs/dashboard.log 2>&1 &)
+(cd frontend/nextjs && { [ -d node_modules ] || npm install --no-audit --no-fund; } && exec nohup npm run dev) > .logs/dashboard.log 2>&1 < /dev/null &
 wait_for dashboard http://127.0.0.1:3000/login
 
 echo
 echo "Dashboard: http://localhost:3000   login: $SOC_ADMIN_EMAIL  (password: SOC_ADMIN_PASSWORD in .env)"
-echo "SSH decoy: ssh -p 2222 deploy@localhost   (password: deploy_password in backend/go/seed/out/persona.json)"
+echo "Decoys:    SSH ssh -p 2222 deploy@localhost (deploy_password in backend/go/seed/out/persona.json)"
+echo "           Web http://localhost:8080   Beacon http://localhost:8088   K8s https://localhost:6443 (when built)"
+echo "Logs:      .logs/   Stop: scripts/dev-down.sh"

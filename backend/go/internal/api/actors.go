@@ -14,6 +14,7 @@ import (
 	"github.com/ryuma04/decoy/backend/internal/intel/mitre"
 	"github.com/ryuma04/decoy/backend/internal/intel/risk"
 	"github.com/ryuma04/decoy/backend/internal/maze"
+	"github.com/ryuma04/decoy/backend/internal/narrate"
 	"github.com/ryuma04/decoy/backend/internal/store"
 )
 
@@ -117,16 +118,16 @@ type fingerprintOut struct {
 
 type actorDetail struct {
 	dto.ActorSummary
-	RiskBreakdown risk.Breakdown   `json:"risk_breakdown"`
-	ToolTags      []dto.ToolTag    `json:"tool_tags"`
-	External      map[string]any   `json:"external"`
-	Sessions      []dto.Session    `json:"sessions"`
-	Fingerprints  []fingerprintOut `json:"fingerprints"`
-	Findings      []dto.Finding    `json:"findings"`
-	Behaviour     behaviourDetail  `json:"behaviour"`
-	Interest      map[string]int   `json:"interest"`
-	IncidentID    *string          `json:"incident_id"`
-	Narrative     *json.RawMessage `json:"narrative"`
+	RiskBreakdown risk.Breakdown     `json:"risk_breakdown"`
+	ToolTags      []dto.ToolTag      `json:"tool_tags"`
+	External      map[string]any     `json:"external"`
+	Sessions      []dto.Session      `json:"sessions"`
+	Fingerprints  []fingerprintOut   `json:"fingerprints"`
+	Findings      []dto.Finding      `json:"findings"`
+	Behaviour     behaviourDetail    `json:"behaviour"`
+	Interest      map[string]int     `json:"interest"`
+	IncidentID    *string            `json:"incident_id"`
+	Narrative     *narrate.Narrative `json:"narrative"`
 }
 
 var featureNames = []string{"median_gap_ms", "gap_cv", "edit_rate", "paste_rate", "output_dependence", "services_visited",
@@ -227,8 +228,15 @@ func (s *Server) getActor(w http.ResponseWriter, r *http.Request) {
 	}
 	d.Behaviour = bDetail
 
+	incidentID := ""
 	if inc, err := s.DB.IncidentOfActor(ctx, a.ActorID); err == nil {
 		d.IncidentID = &inc.IncidentID
+		incidentID = inc.IncidentID
+	}
+	// "What happened" card: the instant template text (the LLM version is on the incident page / Explain).
+	if len(findings) > 0 {
+		nar := narrate.Template(s.facts(r, a, sum, findings, nil, incidentID))
+		d.Narrative = &nar
 	}
 	writeJSON(w, http.StatusOK, d)
 }
