@@ -33,8 +33,8 @@ Still open (not attempted yet; specified in the docs):
 | --- | --- | --- | --- |
 | 9 | External-telemetry linking (`intel/extlink`): link `origin: production` events to actors, findings `decoy_cred_on_real`, `real_bruteforce`, `real_success`, `fw_repeat`, set `touched_production` | 07 §8.2 | `cmd/log-collector` and `logparse` (built); engine skips production events today |
 | 10 | Tool detection (`intel/tools`, `rules/tools.yaml`) → `actors.tools` | 07 §9.1 | `dto.ToolTag`, `actors.tools` column |
-| 11 | Stretch: cognitive tactics, LLM lures, false-positive recovery | 08 §Cognitive / §LLM lures, 09 §Recovery | — |
-| 12 | Divert proxy for the Aetees shop (`internal/divert`, `cmd/divert-proxy`): same-URL routing real ↔ clone, tripwires, lures, cognitive tactics, auto-release, LLM pages for unknown paths | Tasks 9–12 in 18 | Built for it: policy `diverted_ip` / `released_ip` (`Kit.Diverted`, `Kit.Released`), `/v1/diversions`, events `session.diverted` / `session.released` / `deception.tactic` (stored, shown on the actor page), honeytokens `tok_aetees_admin` / `tok_aetees_invoice`, lab shop `scripts/aetees-lab.sh` (real :3100, clone :3101) |
+| 11 | Stretch: cognitive tactics, LLM lures, false-positive recovery | 08 §Cognitive / §LLM lures, 09 §Recovery | done (Antigravity) |
+| 12 | Divert proxy for the Aetees shop (`internal/divert`, `cmd/divert-proxy`): same-URL routing real ↔ clone, tripwires, lures, cognitive tactics, auto-release, LLM pages for unknown paths | Tasks 9–12 in 18 | done (Antigravity) |
 
 Known limits found while testing:
 - Each event costs the engine several Postgres round trips; against Neon in eu-west-2 from India that is ~2–4 s
