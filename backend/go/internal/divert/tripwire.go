@@ -3,6 +3,7 @@ package divert
 import (
 	"bytes"
 	"context"
+	"encoding/json"
 	"io"
 	"net/http"
 	"net/url"
@@ -30,7 +31,7 @@ var (
 		"python-requests", "curl/", "wget/", "go-http-client/", "aiohttp", "httpie",
 	}
 
-	oddSearchRegex = regexp.MustCompile(`[~^\{\}\[\]\$` + "`" + `]|(^'|'$|'\s|\s'|""|\")`)
+	oddSearchRegex = regexp.MustCompile(`[~^\{\}\[\]\$` + "`" + `]`)
 )
 
 // Tripwire satisfies the divert.Classifier interface (docs/18 Task 10).
@@ -75,7 +76,7 @@ func (tw *Tripwire) Classify(r *http.Request, body []byte, v VisitorView) Trip {
 		}
 	}
 
-	// 2. Hard check: offensive tool user agents
+	// 3. Hard check: offensive tool user agents
 	for _, tool := range offensiveTools {
 		if strings.Contains(ua, tool) {
 			return Trip{
@@ -88,7 +89,7 @@ func (tw *Tripwire) Classify(r *http.Request, body []byte, v VisitorView) Trip {
 		}
 	}
 
-	// 3. Hard check: repeated failed admin logins
+	// 4. Hard check: repeated failed admin logins
 	if v.FailedLogins10m >= 5 {
 		return Trip{
 			Sev:    SevHard,
@@ -99,12 +100,12 @@ func (tw *Tripwire) Classify(r *http.Request, body []byte, v VisitorView) Trip {
 		}
 	}
 
-	// 4. Hard check: injection payloads in query parameters, path, or body
+	// 5. Injection payloads in query parameters, path, or body (JSON, form, raw)
 	if trip, found := tw.checkInjections(r, body); found {
 		return trip
 	}
 
-	// 5. Soft check: burst of 404s
+	// 6. Soft check: burst of 404s
 	if v.NotFound5m >= 5 {
 		return Trip{
 			Sev:    SevSoft,
@@ -115,7 +116,7 @@ func (tw *Tripwire) Classify(r *http.Request, body []byte, v VisitorView) Trip {
 		}
 	}
 
-	// 6. Soft check: scripted client (curl/python without browser headers)
+	// 7. Soft check: scripted client (curl/python without browser headers)
 	for _, sc := range scriptedClients {
 		if strings.Contains(ua, sc) && !strings.Contains(ua, "mozilla") && !strings.Contains(ua, "chrome") {
 			return Trip{
@@ -128,7 +129,7 @@ func (tw *Tripwire) Classify(r *http.Request, body []byte, v VisitorView) Trip {
 		}
 	}
 
-	// 7. Soft check: odd characters in search query
+	// 8. Soft check: odd characters in search query
 	query := r.URL.Query()
 	for param, vals := range query {
 		if param == "q" || param == "search" || param == "query" {
@@ -146,7 +147,7 @@ func (tw *Tripwire) Classify(r *http.Request, body []byte, v VisitorView) Trip {
 		}
 	}
 
-	// 8. Soft check: high request rate
+	// 9. Soft check: high request rate
 	if v.RequestsPerMin >= 30 {
 		return Trip{
 			Sev:    SevSoft,
@@ -157,8 +158,52 @@ func (tw *Tripwire) Classify(r *http.Request, body []byte, v VisitorView) Trip {
 		}
 	}
 
-	// 9. Clean request
+	// 10. Clean request
 	return Trip{Sev: SevNone}
+}
+
+type bodyField struct {
+	param string
+	value string
+}
+
+func extractJSONStrings(data any, prefix string, out *[]bodyField) {
+	switch v := data.(type) {
+	case map[string]any:
+		for k, val := range v {
+			fullName := k
+			if prefix != "" {
+				fullName = prefix + "." + k
+			}
+			switch s := val.(type) {
+			case string:
+				*out = append(*out, bodyField{param: k, value: s})
+			case map[string]any, []any:
+				extractJSONStrings(s, fullName, out)
+			}
+		}
+	case []any:
+		for _, item := range v {
+			extractJSONStrings(item, prefix, out)
+		}
+	}
+}
+
+func isFreeTextField(param string) bool {
+	p := strings.ToLower(strings.TrimSpace(param))
+	switch p {
+	case "message", "notes", "note", "name", "address", "search", "q", "query", "comment", "comments", "feedback", "body":
+		return true
+	}
+	for _, suffix := range []string{"_name", ".name", "-name", "_address", ".address", "-address", "_notes", "_message"} {
+		if strings.HasSuffix(p, suffix) {
+			if p == "filename" || p == "file_name" || p == "tablename" || p == "table_name" || p == "dbname" || p == "db_name" {
+				return false
+			}
+			return true
+		}
+	}
+	return false
 }
 
 func (tw *Tripwire) checkInjections(r *http.Request, body []byte) (Trip, bool) {
@@ -178,82 +223,166 @@ func (tw *Tripwire) checkInjections(r *http.Request, body []byte) (Trip, bool) {
 	// 2. Check query string
 	for k, vv := range r.URL.Query() {
 		for _, v := range vv {
-			if label, ok := tw.classifyValue(k, v, path, "query"); ok {
-				return Trip{
-					Sev:    SevHard,
-					Reason: "injection payload in query: " + k,
-					Label:  label,
-					Param:  k,
-					Value:  v,
-				}, true
+			if trip, ok := tw.gradeParam(k, v, path, "query"); ok {
+				return trip, true
 			}
 		}
 	}
 
-	// 3. Check body for URL-encoded, form, or raw payloads
+	// 3. Check body for JSON, form-encoded, or raw payloads
 	if len(body) > 0 && len(body) <= 65536 {
-		bodyStr := string(body)
-		if vals, err := url.ParseQuery(bodyStr); err == nil && len(vals) > 0 {
-			for k, vv := range vals {
-				for _, v := range vv {
-					if label, ok := tw.classifyValue(k, v, path, "form"); ok {
-						return Trip{
-							Sev:    SevHard,
-							Reason: "injection payload in body param: " + k,
-							Label:  label,
-							Param:  k,
-							Value:  v,
-						}, true
+		ct := strings.ToLower(r.Header.Get("Content-Type"))
+		trimmed := bytes.TrimSpace(body)
+		isJSON := strings.Contains(ct, "application/json") ||
+			bytes.HasPrefix(trimmed, []byte("{")) ||
+			bytes.HasPrefix(trimmed, []byte("["))
+
+		if isJSON {
+			var parsed any
+			if err := json.Unmarshal(body, &parsed); err == nil {
+				var fields []bodyField
+				extractJSONStrings(parsed, "", &fields)
+				for _, f := range fields {
+					if trip, ok := tw.gradeParam(f.param, f.value, path, "json"); ok {
+						return trip, true
 					}
 				}
+				return Trip{}, false
 			}
-		} else {
-			// Direct check on body text (JSON or raw)
-			if label, ok := tw.classifyValue("body", bodyStr, path, "body"); ok {
-				return Trip{
-					Sev:    SevHard,
-					Reason: "injection payload in request body",
-					Label:  label,
-					Param:  "body",
-					Value:  bodyStr,
-				}, true
+		}
+
+		// Form body check
+		if strings.Contains(ct, "application/x-www-form-urlencoded") || bytes.Contains(body, []byte("=")) {
+			bodyStr := string(body)
+			if vals, err := url.ParseQuery(bodyStr); err == nil && len(vals) > 0 {
+				for k, vv := range vals {
+					for _, v := range vv {
+						if trip, ok := tw.gradeParam(k, v, path, "form"); ok {
+							return trip, true
+						}
+					}
+				}
+				return Trip{}, false
 			}
+		}
+
+		// Direct check on raw body
+		bodyStr := string(body)
+		if trip, ok := tw.gradeParam("body", bodyStr, path, "body"); ok {
+			return trip, true
 		}
 	}
 
 	return Trip{}, false
 }
 
-func (tw *Tripwire) classifyValue(param, val, path, field string) (string, bool) {
-	// First check explicit path traversal
-	if strings.Contains(val, "../") || strings.Contains(val, "..\\") {
-		return "path_traversal", true
+func (tw *Tripwire) gradeParam(param, val, path, field string) (Trip, bool) {
+	if val == "" {
+		return Trip{}, false
 	}
 
 	res := web.CheckInput(val)
-	// ONLY values that match an actual exploitation separator trigger the pre-check!
-	if !res.IsSuspicious || res.Separator == "" {
-		return "", false
+	hasExploit := res.IsSuspicious && res.Separator != ""
+	if !hasExploit {
+		lower := strings.ToLower(val)
+		if strings.Contains(lower, "<script") ||
+			strings.Contains(lower, "union select") ||
+			strings.Contains(lower, "javascript:") ||
+			strings.Contains(lower, "onerror=") ||
+			strings.Contains(lower, "../") ||
+			strings.Contains(lower, "..\\") {
+			hasExploit = true
+		}
 	}
 
-	// If ML service is configured, query it
+	if !hasExploit {
+		return Trip{}, false
+	}
+
+	// Free-text fields (message, notes, name, address, search):
+	// Must NEVER be diverted on the separator pre-check alone.
+	if isFreeTextField(param) {
+		if tw.ml != nil && tw.ml.Enabled() {
+			ctx, cancel := context.WithTimeout(context.Background(), 300*time.Millisecond)
+			defer cancel()
+			mlRes, err := tw.ml.ClassifyInput(ctx, param, val, "web", path, field)
+			if err == nil {
+				if mlRes.Risk >= 0.8 {
+					lbl := mlRes.Label
+					if lbl == "" || lbl == "normal" {
+						lbl = classifyPrecheck(res)
+					}
+					return Trip{
+						Sev:    SevHard,
+						Reason: "injection payload in " + field + " param: " + param,
+						Label:  lbl,
+						Param:  param,
+						Value:  val,
+					}, true
+				} else if mlRes.Risk >= 0.5 {
+					lbl := mlRes.Label
+					if lbl == "" || lbl == "normal" {
+						lbl = classifyPrecheck(res)
+					}
+					return Trip{
+						Sev:    SevSoft,
+						Reason: "suspicious input in " + field + " param: " + param,
+						Label:  lbl,
+						Param:  param,
+						Value:  val,
+					}, true
+				} else {
+					// Pre-check matched, but model risk < 0.5 -> None!
+					return Trip{}, false
+				}
+			}
+		}
+
+		// Model is down or error -> Soft (auto-release, checkout held)
+		label := classifyPrecheck(res)
+		return Trip{
+			Sev:    SevSoft,
+			Reason: "separator pre-check match (model down) in " + field + " param: " + param,
+			Label:  label,
+			Param:  param,
+			Value:  val,
+		}, true
+	}
+
+	// Non-free-text fields:
 	if tw.ml != nil && tw.ml.Enabled() {
 		ctx, cancel := context.WithTimeout(context.Background(), 300*time.Millisecond)
 		defer cancel()
 		mlRes, err := tw.ml.ClassifyInput(ctx, param, val, "web", path, field)
 		if err == nil {
-			if mlRes.Label != "normal" && mlRes.Label != "" {
-				return mlRes.Label, true
+			if mlRes.Label != "normal" && mlRes.Label != "" && mlRes.Risk >= 0.5 {
+				sev := SevHard
+				if mlRes.Risk < 0.8 {
+					sev = SevSoft
+				}
+				return Trip{
+					Sev:    sev,
+					Reason: "injection payload in " + field + " param: " + param,
+					Label:  mlRes.Label,
+					Param:  param,
+					Value:  val,
+				}, true
 			}
 			if mlRes.Risk < 0.2 {
-				return "", false
+				return Trip{}, false
 			}
 		}
 	}
 
-	// Fallback to pre-check alone
+	// Fallback to pre-check alone for non-free-text fields
 	label := classifyPrecheck(res)
-	return label, true
+	return Trip{
+		Sev:    SevHard,
+		Reason: "injection payload in " + field + " param: " + param,
+		Label:  label,
+		Param:  param,
+		Value:  val,
+	}, true
 }
 
 func classifyPrecheck(res web.PrecheckResult) string {
