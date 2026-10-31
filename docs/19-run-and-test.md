@@ -126,6 +126,30 @@ Without `LLM_*` in `.env` nothing happens (rules still run).
 `SENSOR_ID=ssh-01 SENSOR_KEY=$KEY_SSH CORE_URL=http://127.0.0.1:8443 go run ./cmd/send-sample -ip 10.66.0.77 -tactic`
 (from `backend/go`, with `.env` loaded) → the new actor's page shows *Tactics applied (1)*: `sunk_cost_export`.
 
+### 9. Divert proxy, planted lures and cognitive tactics
+Run the lab and proxy:
+1. `scripts/aetees-lab.sh` starts the real shop on `:3100` and honeypot clone on `:3101`.
+2. Start the divert proxy on `:8200`:
+   ```bash
+   (cd backend/go && SENSOR_ID=aetees-01 SENSOR_KEY=$KEY_AETEES LISTEN_ADDR=:8200 \
+     REAL_URL=http://127.0.0.1:3100 CLONE_URL=http://127.0.0.1:3101 go run ./cmd/divert-proxy)
+   ```
+3. **Clean visitor**: `curl -c cookies.txt -i http://localhost:8200/` reaches the real shop (`:3100`). Real customer traffic is never sent to the clone or logged to core.
+4. **Soft diversion & checkout hold**:
+   - `curl -b cookies.txt -c cookies.txt -i "http://localhost:8200/?search='"` triggers soft diversion.
+   - `curl -b cookies.txt -c cookies.txt -X POST -i http://localhost:8200/api/checkout` returns `503 Service Unavailable` with `{"success":false,"error":"We're receiving a lot of orders right now. Please try again in a minute."}` (writes held; real shop protected).
+5. **Hard diversion & planted lures**:
+   - `curl -b cookies.txt -c cookies.txt -i http://localhost:8200/.env` triggers hard diversion.
+   - Read lure `/.env.bak`: `curl -b cookies.txt -c cookies.txt http://localhost:8200/.env.bak` returns fake env with `tok_aetees_admin` password and `tok_db`, emitting `file.read`.
+   - Read lure `/backup/`: `curl -b cookies.txt -c cookies.txt http://localhost:8200/backup/` lists `aetees_db_FINAL.sql.gz`.
+   - Download lure `/backup/aetees_db_FINAL.sql.gz`: `curl -b cookies.txt -c cookies.txt http://localhost:8200/backup/aetees_db_FINAL.sql.gz -o dump.sql.gz` emits `file.download`. Gunzipping reveals canary invoice link `tok_aetees_invoice`.
+   - Trigger canary token: `curl -b cookies.txt -c cookies.txt "http://localhost:8200$(python -c "import json;print(json.load(open('backend/go/seed/out/tokens.json'))['tok_aetees_invoice']['match_value'])")"` serves invoice and emits `token.used`.
+6. **Cognitive deception tactics**:
+   - `false_success`: Send 3 wrong passwords to `/api/admin/login`; on the 4th attempt, the proxy rewrites the credentials to the clone's admin password, granting access to synthetic data and emitting `deception.tactic` (`false_success`).
+   - `sunk_cost_export`: Repeatedly poll `/api/admin/export`; progress climbs (30%, 65%, 88%) then stalls at 97% for several polls before reaching 100% and offering `/api/admin/export/download` (CSV of synthetic customers), emitting `deception.tactic` (`sunk_cost_export`).
+   - `breadcrumb`: `curl -b cookies.txt -c cookies.txt http://localhost:8200/` returns clone HTML with injected comment `<!-- DEBUG: Migration in progress. Remove /.env.bak and /backup/ before production release. -->`.
+   - `llm_page`: `curl -b cookies.txt -c cookies.txt http://localhost:8200/admin/staff-report` intercepts clone 404, generating an Aetees-themed decoy portal page (#5a3424, #f8ecc2, Oswald/Inter) and caching it to disk under `.data/lure_pages/`.
+
 ## If something looks wrong
 - Nothing on the dashboard: check `.logs/core.log` and the decoy log in `.logs/`; `scripts/dev-down.sh` then
   `scripts/dev-up.sh`.

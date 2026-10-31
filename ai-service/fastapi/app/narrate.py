@@ -220,3 +220,32 @@ def narrate(req: NarrateRequest, cfg: Config | None = None, client: httpx.Client
         raise LLMError(f"unknown LLM_PROVIDER {cfg.provider}")
     out, checks = guard(raw, req)
     return {**out, "source": "llm", "model": cfg.model, "prompt_hash": PROMPT_HASH, "guard": checks}
+
+
+def generate_lure_page(path: str, site: str = "Aetees Bakehouse", cfg: Config | None = None) -> dict:
+    cfg = cfg or Config.from_env()
+    prompt = (
+        f"You are generating an internal decoy portal page for '{site}'.\n"
+        f"The requested URL path is '{path}'.\n"
+        f"Produce a realistic internal title and clean HTML fragment (body_html) suitable for an employee portal, "
+        f"report dashboard, or admin login panel.\n"
+        f"RULES: Output JSON with keys 'title' and 'body_html'.\n"
+        f"NEVER include <script> tags, NEVER include external links (href to outside domains), "
+        f"and NEVER include real personal data. Use only mock synthetic data."
+    )
+    if not cfg.enabled:
+        return {
+            "title": f"Internal Portal — {site}",
+            "body_html": f"<div class='notice'><h3>Notice: Restricted Area ({path})</h3><p>Authorized personnel only.</p></div>"
+        }
+    try:
+        raw = call_llm(cfg, user=prompt, system="You generate synthetic decoy portal HTML. Output valid JSON.", max_tokens=600)
+        data = json.loads(raw)
+        title = data.get("title", f"Internal Portal — {site}")
+        body_html = data.get("body_html", f"<div class='notice'><h3>Notice: Restricted Area ({path})</h3><p>Authorized personnel only.</p></div>")
+        return {"title": title, "body_html": body_html}
+    except Exception:
+        return {
+            "title": f"Internal Portal — {site}",
+            "body_html": f"<div class='notice'><h3>Notice: Restricted Area ({path})</h3><p>Authorized personnel only.</p></div>"
+        }

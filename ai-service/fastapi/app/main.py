@@ -9,8 +9,8 @@ from fastapi.responses import JSONResponse
 from app import narrate as narr
 from app import technique as tech
 from app.input_model import get_model
-from app.schemas import (ClassifyInputRequest, ClassifyInputResponse, MapTechniqueRequest, MapTechniqueResponse,
-                         NarrateRequest, NarrateResponse)
+from app.schemas import (ClassifyInputRequest, ClassifyInputResponse, LurePageRequest, LurePageResponse,
+                         MapTechniqueRequest, MapTechniqueResponse, NarrateRequest, NarrateResponse)
 
 log = logging.getLogger("ml")
 
@@ -69,3 +69,8 @@ async def map_technique(req: MapTechniqueRequest):
     except narr.LLMError as e:
         log.warning("map-technique failed service=%s: %s", req.service, e)
         return _error(502, "llm_error", str(e))
+
+
+@app.post("/ml/v1/lure-page", response_model=LurePageResponse)
+async def lure_page(req: LurePageRequest):
+    return await run_in_threadpool(narr.generate_lure_page, req.path, req.site)

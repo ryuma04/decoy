@@ -13,6 +13,9 @@ nodes:
   - {id: lure_ci_secret,  kind: lure,    theme: ci,       label: ci-jenkins-token secret, default: hidden}
   - {id: svc_jenkins,     kind: service, service: web,    label: Jenkins decoy, stretch: true}
   - {id: svc_db,          kind: service, service: db,      label: Postgres decoy}
+  - {id: aetees_entry,    kind: entry,   service: web,    label: Aetees shop}
+  - {id: lure_aetees_env, kind: lure,    theme: null,     label: aetees:/.env.bak,    token: tok_aetees_admin, default: visible}
+  - {id: lure_aetees_orders, kind: lure, theme: null,     label: aetees:order canary, token: tok_aetees_invoice, default: visible}
 edges:
   - {from: web_entry, to: lure_backup}
   - {from: lure_backup, to: ssh_entry, label: uses leaked key}
@@ -24,6 +27,8 @@ edges:
   - {from: svc_k8s, to: lure_ci_secret}
   - {from: lure_ci_secret, to: svc_jenkins}
   - {from: lure_db, to: svc_db}
+  - {from: aetees_entry, to: lure_aetees_env}
+  - {from: lure_aetees_env, to: lure_aetees_orders}
 interest_signals:          # (regex over command/path/api, theme, points)
   - {match: 'kubectl|\.kube|kubeconfig|6443|k8s|kubernetes', theme: k8s, points: 3}
   - {match: 'docker|containerd|helm', theme: k8s, points: 1}

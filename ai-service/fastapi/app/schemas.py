@@ -91,3 +91,13 @@ class MapTechniqueResponse(BaseModel):
     model: str
     prompt_hash: str
     cached: bool = False
+
+
+class LurePageRequest(BaseModel):
+    path: str
+    site: str = "Aetees Bakehouse"
+
+
+class LurePageResponse(BaseModel):
+    title: str
+    body_html: str

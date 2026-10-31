@@ -19,7 +19,8 @@ DECOYS="ssh:ssh-01:KEY_SSH:2222 web:web-01:KEY_WEB:8080 beacon:beacon-01:KEY_BEA
 
 echo "[1/5] building Go binaries"
 (cd backend/go && go build -o bin/core.exe ./cmd/core && go build -o bin/seed.exe ./cmd/seed \
-  && for d in $DECOYS; do n=${d%%:*}; [ -d "cmd/decoy-$n" ] && go build -o "bin/decoy-$n.exe" "./cmd/decoy-$n"; done; true)
+  && for d in $DECOYS; do n=${d%%:*}; [ -d "cmd/decoy-$n" ] && go build -o "bin/decoy-$n.exe" "./cmd/decoy-$n"; done \
+  && { [ -d "cmd/divert-proxy" ] && go build -o "bin/divert-proxy.exe" "./cmd/divert-proxy" || true; }; true)
 
 echo "[2/5] seed (persona + honeytokens)"
 if [ -f backend/go/seed/out/tokens.json ] && [ "${RESEED:-0}" != 1 ]; then
@@ -47,6 +48,13 @@ for d in $DECOYS; do
 done
 sleep 3
 for d in $DECOYS; do n=${d%%:*}; [ -f ".logs/decoy-$n.log" ] && echo "  decoy-$n: $(grep -m1 -oiE 'listening[^,]*|error[^,]*' ".logs/decoy-$n.log" || echo 'starting')"; done
+if [ -d ".lab/aetees" ] && [ -f "backend/go/bin/divert-proxy.exe" ]; then
+  mkdir -p ".data/aetees"
+  (cd backend/go && SENSOR_ID="aetees-01" SENSOR_KEY="${KEY_AETEES:-}" CORE_URL=http://127.0.0.1:8443 \
+    LISTEN_ADDR=":8200" REAL_URL="http://127.0.0.1:3100" CLONE_URL="http://127.0.0.1:3101" \
+    DATA_DIR="$ROOT/.data/aetees" SEED_DIR="$ROOT/backend/go/seed" exec nohup "./bin/divert-proxy.exe") > ".logs/divert-proxy.log" 2>&1 < /dev/null &
+  echo "  divert-proxy :8200 -> real :3100 / clone :3101"
+fi
 
 echo "[5/5] dashboard :3000"
 (cd frontend/nextjs && { [ -d node_modules ] || npm install --no-audit --no-fund; } && exec nohup npm run dev) > .logs/dashboard.log 2>&1 < /dev/null &

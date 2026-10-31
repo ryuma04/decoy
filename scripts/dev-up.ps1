@@ -31,3 +31,4 @@ Write-Host "`nEnvironment seeded successfully!"
 Write-Host "To run the full stack, choose either:"
 Write-Host "  A) Docker: docker compose --profile decoys --profile ui up --build"
 Write-Host "  B) Local:  Start each service in a separate PowerShell window using the commands provided."
+
