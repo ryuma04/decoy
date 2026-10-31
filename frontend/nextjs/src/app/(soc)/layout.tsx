@@ -19,6 +19,7 @@ import {
   Sparkles,
   Search,
   AlertTriangle,
+  Shuffle,
 } from "lucide-react";
 
 export default function SocLayout({ children }: { children: React.ReactNode }) {
@@ -74,6 +75,7 @@ function SocShell({ children }: { children: React.ReactNode }) {
     { href: "/actors", label: "Actors", icon: Users },
     { href: "/incidents", label: "Incidents", icon: ShieldAlert },
     { href: "/maze", label: "Deception Maze", icon: Compass },
+    { href: "/diversions", label: "Diversions", icon: Shuffle },
     { href: "/honeytokens", label: "Honeytokens", icon: KeyRound },
     { href: "/sensors", label: "Sensors", icon: Server },
     { href: "/scorer", label: "Scorer Engine", icon: Sliders },

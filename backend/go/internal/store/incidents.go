@@ -220,6 +220,18 @@ func (s *Store) ApplyAction(ctx context.Context, incidentID, action, target, use
 				ON CONFLICT (kind, value) DO UPDATE SET until = EXCLUDED.until`
 		case "unblock_ip":
 			q = `DELETE FROM policy WHERE kind = 'blocked_ip' AND value = $1`
+		case "divert_ip": // divert proxy serves this IP from the honeypot clone; clears an earlier release
+			if _, err := tx.Exec(ctx, `DELETE FROM policy WHERE kind = 'released_ip' AND value = $1`, target); err != nil {
+				return err
+			}
+			q = `INSERT INTO policy (kind, value, until) VALUES ('diverted_ip', $1, now() + interval '24 hours')
+				ON CONFLICT (kind, value) DO UPDATE SET until = EXCLUDED.until`
+		case "release_ip": // false positive: back to the real site, and the proxy will not divert it again on weak signals
+			if _, err := tx.Exec(ctx, `DELETE FROM policy WHERE kind = 'diverted_ip' AND value = $1`, target); err != nil {
+				return err
+			}
+			q = `INSERT INTO policy (kind, value, until) VALUES ('released_ip', $1, now() + interval '24 hours')
+				ON CONFLICT (kind, value) DO UPDATE SET until = EXCLUDED.until`
 		case "kill_session":
 			q = `INSERT INTO policy (kind, value, until) VALUES ('killed_session', $1, now() + interval '1 hour')
 				ON CONFLICT (kind, value) DO NOTHING`
@@ -233,7 +245,7 @@ func (s *Store) ApplyAction(ctx context.Context, incidentID, action, target, use
 			return err
 		}
 		return tx.QueryRow(ctx, `INSERT INTO response_actions (incident_id, action, target, requested_by, status)
-			VALUES ($1::uuid, $2, $3, $4::uuid, 'applied') RETURNING action_id, action, target, status, COALESCE(requested_by::text, ''), ts`,
+			VALUES (NULLIF($1, '')::uuid, $2, $3, $4::uuid, 'applied') RETURNING action_id, action, target, status, COALESCE(requested_by::text, ''), ts`,
 			incidentID, action, target, userID).Scan(&a.ActionID, &a.Action, &a.Target, &a.Status, &a.RequestedBy, &a.TS)
 	})
 	return a, err
@@ -253,6 +265,48 @@ func (s *Store) Actions(ctx context.Context, incidentID string) ([]ActionRow, er
 			return nil, err
 		}
 		out = append(out, a)
+	}
+	return out, rows.Err()
+}
+
+// Diversion is the divert proxy's current state for one IP (policy diverted_ip / released_ip).
+type Diversion struct {
+	IP     string    `json:"ip"`
+	State  string    `json:"state"` // diverted | released
+	Until  time.Time `json:"until"`
+	Reason string    `json:"reason"` // last session.diverted / session.released reason, if any
+	At     *time.Time `json:"at"`
+	Actor  *string   `json:"actor_label"`
+}
+
+// Diversions lists IPs the proxy diverts or was told to release, with the latest proxy event for each.
+func (s *Store) Diversions(ctx context.Context) ([]Diversion, error) {
+	rows, err := s.Pool.Query(ctx, `
+		SELECT p.value, CASE p.kind WHEN 'diverted_ip' THEN 'diverted' ELSE 'released' END, COALESCE(p.until, now() + interval '24 hours'),
+		       COALESCE(ev.data->>'reason', ''), ev.ts, ev.label
+		FROM policy p
+		LEFT JOIN LATERAL (SELECT e.data, e.ts, a.label FROM events e LEFT JOIN actors a ON a.actor_id = e.actor_id
+		    WHERE e.type IN ('session.diverted', 'session.released') AND host(e.src_ip) = p.value ORDER BY e.ts DESC LIMIT 1) ev ON true
+		WHERE p.kind IN ('diverted_ip', 'released_ip') AND (p.until IS NULL OR p.until > now())
+		UNION ALL
+		SELECT * FROM (SELECT DISTINCT ON (host(e.src_ip)) host(e.src_ip), CASE e.type WHEN 'session.diverted' THEN 'diverted' ELSE 'released' END,
+		       e.ts + interval '24 hours', COALESCE(e.data->>'reason', ''), e.ts, a.label
+		FROM events e LEFT JOIN actors a ON a.actor_id = e.actor_id
+		WHERE e.type IN ('session.diverted', 'session.released') AND e.ts > now() - interval '24 hours'
+		  AND NOT EXISTS (SELECT 1 FROM policy p WHERE p.kind IN ('diverted_ip', 'released_ip') AND p.value = host(e.src_ip))
+		  ORDER BY host(e.src_ip), e.ts DESC) recent
+		ORDER BY 1`)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	out := []Diversion{}
+	for rows.Next() {
+		var d Diversion
+		if err := rows.Scan(&d.IP, &d.State, &d.Until, &d.Reason, &d.At, &d.Actor); err != nil {
+			return nil, err
+		}
+		out = append(out, d)
 	}
 	return out, rows.Err()
 }

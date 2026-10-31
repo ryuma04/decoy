@@ -3,6 +3,8 @@ import type {
   ActorDetail,
   ActorSummary,
   ApiError,
+  DeceptionTactic,
+  Diversion,
   Event,
   FeedbackResult,
   Honeytoken,
@@ -134,6 +136,19 @@ export const api = {
     );
     if (Array.isArray(res)) return { items: res, next_cursor: null };
     return res;
+  },
+  getActorTactics: async (id: string): Promise<DeceptionTactic[]> => {
+    if (USE_MOCKS) return [];
+    const res = await call<{ items: DeceptionTactic[] }>(`/actors/${encodeURIComponent(id)}/tactics`);
+    return res.items;
+  },
+  listDiversions: async (): Promise<Diversion[]> => {
+    if (USE_MOCKS) return [];
+    const res = await call<{ items: Diversion[] }>("/diversions");
+    return res.items;
+  },
+  setDiversion: async (ip: string, action: "divert" | "release"): Promise<ResponseAction> => {
+    return call<ResponseAction>("/diversions", { method: "POST", body: JSON.stringify({ ip, action }) });
   },
   getActorMaze: async (id: string): Promise<MazeGraph> => {
     if (USE_MOCKS) return mockActorMaze as unknown as MazeGraph;

@@ -37,3 +37,6 @@ __pycache__/
 .data/
 *.exe
 *.tsbuildinfo
+
+# Aetees lab copies (scripts/aetees-lab.sh) — client source, never commit
+.lab/

@@ -53,7 +53,7 @@ export interface Fingerprint { kind: string; value: string; session_ids: string[
 export interface Finding {
   finding_id: number; actor_id: string; session_id: string; rule_id: string; title: string;
   tactic: string | null; technique: string | null; technique_name: string | null;
-  stage: Stage; points: number; confidence: number; source: "rule" | "ml" | "rule+ml";
+  stage: Stage; points: number; confidence: number; source: "rule" | "ml" | "rule+ml" | "llm";
   evidence: { event_ids: string[]; matched?: string;
               ml?: { label: string; risk: number; confidence: number; top_features: string[]; was_encoded: boolean } };
   ts: string;
@@ -129,3 +129,25 @@ export interface NarrativeMessage { kind: "actor" | "incident"; ref_id: string; 
 export interface FeedbackResult { feedback_id: number; old_risk: number; new_risk: number; weights_version: number; }
 export interface ApiError { error: { code: string; message: string } }
 export type ResponseActionName = "block_ip" | "unblock_ip" | "kill_session" | "rotate_token";
+
+// Divert proxy (09 §Recovery): IPs served from the honeypot clone, or released back to the real shop.
+export interface Diversion {
+  ip: string;
+  state: "diverted" | "released";
+  until: string;
+  reason: string;
+  at: string | null;
+  actor_label: string | null;
+}
+
+// Cognitive-deception tactic a decoy applied to an actor (08 §Cognitive).
+export interface DeceptionTactic {
+  tactic_id: number;
+  actor_id: string;
+  bias_pattern: string;
+  tactic: string;
+  lure_id: string | null;
+  trigger_event_ids: string[];
+  effect: Record<string, unknown>;
+  ts: string;
+}

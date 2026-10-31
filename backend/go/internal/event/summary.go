@@ -70,6 +70,10 @@ func Summary(typ string, d map[string]any) string {
 			s("username"), map[bool]string{true: "succeeded", false: "failed"}[strings.HasSuffix(typ, "success")])
 	case "deception.tactic":
 		out = "deception tactic applied: " + s("tactic")
+	case "session.diverted":
+		out = "visitor diverted to the honeypot clone: " + s("reason")
+	case "session.released":
+		out = "visitor released back to the real site: " + s("reason")
 	default:
 		out = typ
 	}

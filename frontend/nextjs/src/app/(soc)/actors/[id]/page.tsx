@@ -3,11 +3,12 @@
 import Link from "next/link";
 import { useParams } from "next/navigation";
 import { useEffect, useState } from "react";
-import { api } from "@/lib/api";
+import { api, HttpError } from "@/lib/api";
 import { ago, istTime } from "@/lib/format";
 import { useStream } from "@/lib/stream";
 import type {
   ActorDetail,
+  DeceptionTactic,
   MazeGraph as MazeGraphType,
   Narrative,
   TimelineItem,
@@ -21,6 +22,7 @@ import { Timeline } from "@/components/Timeline";
 import { AttackMatrix } from "@/components/AttackMatrix";
 import { MazeGraph } from "@/components/MazeGraph";
 import { EventDrawer } from "@/components/EventDrawer";
+import { ConfirmDialog } from "@/components/ConfirmDialog";
 import {
   ShieldAlert,
   Sparkles,
@@ -28,6 +30,8 @@ import {
   AlertCircle,
   Network,
   Wrench,
+  Brain,
+  Shuffle,
 } from "lucide-react";
 
 export default function ActorProfilePage() {
@@ -40,9 +44,14 @@ export default function ActorProfilePage() {
   const [selectedEventId, setSelectedEventId] = useState<string | null>(null);
   const [inspectedEvent, setInspectedEvent] = useState<Event | null>(null);
   const [loading, setLoading] = useState(true);
+  const [tactics, setTactics] = useState<DeceptionTactic[]>([]);
+  const [divert, setDivert] = useState<{ ip: string; action: "divert" | "release" } | null>(null);
+  const [divertBusy, setDivertBusy] = useState(false);
+  const [divertMsg, setDivertMsg] = useState("");
 
   useEffect(() => {
     if (!actorId) return;
+    api.getActorTactics(actorId).then(setTactics).catch(() => undefined);
 
     Promise.all([
       api.getActor(actorId).catch(() => null),
@@ -337,6 +346,92 @@ export default function ActorProfilePage() {
           </div>
         </div>
       </div>
+
+      {/* 6b. Cognitive tactics + shop diversion */}
+      <div className="grid grid-cols-1 gap-6 lg:grid-cols-2">
+        <div className="card p-6">
+          <span className="eyebrow">Cognitive Deception</span>
+          <h3 className="mt-1 text-[17px] font-semibold text-ink flex items-center gap-2">
+            <Brain className="h-4 w-4 text-mute" /> Tactics applied ({tactics.length})
+          </h3>
+          <div className="mt-3 divide-y divide-hairline">
+            {tactics.length === 0 ? (
+              <p className="py-2 text-[13px] text-mute italic">No tactics applied to this actor yet.</p>
+            ) : (
+              tactics.map((t) => (
+                <div key={t.tactic_id} className="py-2.5 text-[12px]">
+                  <div className="flex items-center justify-between gap-2">
+                    <span className="font-mono font-semibold text-ink">{t.tactic}</span>
+                    <span className="rounded border border-hairline bg-canvas px-2 py-0.5 font-mono text-[11px] text-body">
+                      {t.bias_pattern.replace("_", " ")}
+                    </span>
+                  </div>
+                  <div className="mt-1 flex flex-wrap gap-3 text-mute font-mono text-[11px]">
+                    <span>{ago(t.ts)}</span>
+                    {t.lure_id && <span>lure: {t.lure_id}</span>}
+                    {Object.entries(t.effect).map(([k, v]) => (
+                      <span key={k}>{k}: {String(v)}</span>
+                    ))}
+                  </div>
+                </div>
+              ))
+            )}
+          </div>
+        </div>
+
+        <div className="card p-6">
+          <span className="eyebrow">Product Website</span>
+          <h3 className="mt-1 text-[17px] font-semibold text-ink flex items-center gap-2">
+            <Shuffle className="h-4 w-4 text-mute" /> Aetees shop diversion
+          </h3>
+          <p className="mt-1 text-[12px] text-body">
+            Divert serves this actor the honeypot clone on the same URL; release sends a false positive back to the real shop.
+          </p>
+          <div className="mt-3 divide-y divide-hairline">
+            {actor.ips.map((ip) => (
+              <div key={ip} className="py-2 flex items-center justify-between font-mono text-[12px]">
+                <span className="text-ink">{ip}</span>
+                <span className="flex gap-2">
+                  <button className="rounded-md border border-hairline px-2.5 py-1 hover:bg-canvas" onClick={() => setDivert({ ip, action: "divert" })}>
+                    Divert
+                  </button>
+                  <button className="rounded-md border border-hairline px-2.5 py-1 hover:bg-canvas" onClick={() => setDivert({ ip, action: "release" })}>
+                    Release
+                  </button>
+                </span>
+              </div>
+            ))}
+          </div>
+          {divertMsg && <p className="mt-2 text-[12px] text-body">{divertMsg}</p>}
+        </div>
+      </div>
+
+      <ConfirmDialog
+        open={divert !== null}
+        onOpenChange={(o) => !o && setDivert(null)}
+        title={divert?.action === "release" ? `Release ${divert.ip} to the real shop?` : `Divert ${divert?.ip ?? ""} to the clone?`}
+        description={
+          divert?.action === "release"
+            ? "Use this for a false positive. The visitor gets the real shop again within 5 seconds."
+            : "The visitor keeps the same URL but is served the honeypot clone for 24 hours; every request is recorded."
+        }
+        confirmLabel={divert?.action === "release" ? "Release" : "Divert"}
+        danger={divert?.action === "divert"}
+        loading={divertBusy}
+        onConfirm={async () => {
+          if (!divert) return;
+          setDivertBusy(true);
+          try {
+            await api.setDiversion(divert.ip, divert.action);
+            setDivertMsg(`${divert.ip}: ${divert.action === "divert" ? "diverted to the clone" : "released to the real shop"}.`);
+            setDivert(null);
+          } catch (e) {
+            setDivertMsg(e instanceof HttpError ? e.message : "Action failed");
+          } finally {
+            setDivertBusy(false);
+          }
+        }}
+      />
 
       {/* 7. Fingerprints */}
       <div className="card p-6">

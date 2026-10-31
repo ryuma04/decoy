@@ -35,6 +35,7 @@ func (s *Server) DBRoutes(mux *http.ServeMux) {
 	mux.HandleFunc("GET /v1/scorer", authed(s.scorer))
 	mux.HandleFunc("GET /v1/maze", authed(s.mazeDefinition))
 	mux.HandleFunc("GET /v1/actors/{id}/maze", authed(s.actorMaze))
+	mux.HandleFunc("GET /v1/actors/{id}/tactics", authed(s.actorTactics))
 	mux.HandleFunc("POST /v1/scorer/reset", admin(s.scorerReset))
 }
 
@@ -491,4 +492,18 @@ func (s *Server) actorMaze(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	writeJSON(w, http.StatusOK, s.MazeGraph.Out(&maze.State{Nodes: nodes, Unlocks: unlocks}, a.ActorID))
+}
+
+// actorTactics lists the cognitive-deception tactics decoys applied to this actor (04 §B).
+func (s *Server) actorTactics(w http.ResponseWriter, r *http.Request) {
+	a, ok := s.actor(w, r)
+	if !ok {
+		return
+	}
+	ts, err := s.DB.TacticsOfActor(r.Context(), a.ActorID)
+	if err != nil {
+		writeError(w, http.StatusServiceUnavailable, "store_unavailable", "try again")
+		return
+	}
+	writeJSON(w, http.StatusOK, map[string]any{"items": ts})
 }

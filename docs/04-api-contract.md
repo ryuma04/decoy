@@ -102,6 +102,8 @@ Decoys refuse new connections from blocked IPs (TCP close), close killed session
 | GET | `/v1/actors/{actor_id}/external` | | list of `Event` with `origin = "production"` linked to the actor |
 | GET | `/v1/allowlist` · POST · DELETE `/v1/allowlist/{cidr}` | `{"cidr","reason"}` | allowlist entries (admin) |
 | GET | `/v1/actors/{actor_id}/tactics` | | list of deception tactics with effect |
+| GET | `/v1/diversions` | | `{items:[{ip, state: diverted\|released, until, reason, at, actor_label}]}` (divert proxy policy) |
+| POST | `/v1/diversions` | admin | `{ip, action: divert\|release}` → policy `diverted_ip` / `released_ip` for 24 h; also incident actions `divert_ip`, `release_ip` |
 | GET | `/v1/actors/{actor_id}/generated-lures` | | list of generated lures (content, guard and critic results, source) |
 | POST | `/v1/incidents/{incident_id}/recovery` | `{"approve": true}` | recovery plan (`recovery_id`, actions, status) — only after false-positive feedback |
 | GET | `/v1/recovery/{recovery_id}` | | recovery plan status and per-action results |
@@ -286,6 +288,7 @@ rules (input) or its Go template (narration). Full spec: 10.
 | GET | `/health` | | `{"ok":true,"models":{"input":"v1"},"narration":"llm","llm_model":"llama-3.3-70b-versatile"}` (`narration: "off"`, `llm_model: null` without a key) |
 | POST | `/ml/v1/classify-input` | `{"param":"host","value":"8.8.8.8%3B%20cat%20/etc/passwd","context":{"service":"web","path":"/api/diagnostics","field":"query"}}` | `{"label":"cmd_injection","risk":0.97,"scores":{"normal":0.03,"cmd_injection":0.95,"sqli":0.01,"xss":0.0,"path_traversal":0.01},"top_features":["; cat","/etc/"],"payload":"cat /etc/passwd","was_encoded":true}` |
 | POST | `/ml/v1/narrate` | `NarrateRequest` (below) | `{"headline","text","bullets":[],"source":"llm","model":"llama-3.3-70b-versatile","prompt_hash":"sha256:…","guard":{"urls":"defanged"}}`, or `503 {"error":{"code":"llm_off",…}}` (no key) / `502 {"error":{"code":"llm_error",…}}` (provider failed or guard rejected) |
+| POST | `/ml/v1/map-technique` | `{"service","event_type","action","allowed":[{"id","name"}]}` | `{"technique":"T1070.003"\|null,"confidence":0.9,"reason":"…","source":"llm","model","prompt_hash","cached":false}`; the technique is always from `allowed` (else 502 guard). Core calls it only when no event rule matched a shell command or k8s call (07 §4.3) |
 
 `risk = 1 − scores.normal` (0–1, 2 decimals). `payload` is set only for `cmd_injection` (text after the first shell
 separator, decoded), else `null`. `context.field` ∈ `query`, `form`, `json`, `path`, `username`.

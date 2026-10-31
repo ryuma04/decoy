@@ -23,6 +23,7 @@ var (
 const (
 	classifyTimeout = 300 * time.Millisecond
 	narrateTimeout  = 5 * time.Second
+	mapTimeout      = 6 * time.Second
 	breakAfter      = 5
 	breakFor        = 30 * time.Second
 )
@@ -117,6 +118,36 @@ func (c *Client) Narrate(ctx context.Context, req NarrateRequest, timeout time.D
 	}
 	var out NarrateResult
 	err := c.post(ctx, "/ml/v1/narrate", timeout, req, &out)
+	return out, err
+}
+
+// AllowedTechnique is one entry of the fallback's allow-list.
+type AllowedTechnique struct {
+	ID   string `json:"id"`
+	Name string `json:"name"`
+}
+
+type MapTechniqueRequest struct {
+	Service   string             `json:"service"`
+	EventType string             `json:"event_type"`
+	Action    string             `json:"action"`
+	Allowed   []AllowedTechnique `json:"allowed"`
+}
+
+// MapTechniqueResult is the LLM's advisory mapping; Technique is nil when nothing fits.
+type MapTechniqueResult struct {
+	Technique  *string `json:"technique"`
+	Confidence float64 `json:"confidence"`
+	Reason     string  `json:"reason"`
+	Model      string  `json:"model"`
+	PromptHash string  `json:"prompt_hash"`
+	Cached     bool    `json:"cached"`
+}
+
+// MapTechnique asks the LLM fallback to map an action no rule matched (07 §4.3).
+func (c *Client) MapTechnique(ctx context.Context, req MapTechniqueRequest) (MapTechniqueResult, error) {
+	var out MapTechniqueResult
+	err := c.post(ctx, "/ml/v1/map-technique", mapTimeout, req, &out)
 	return out, err
 }
 

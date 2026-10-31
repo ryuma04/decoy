@@ -70,6 +70,12 @@ func tokens(p persona.Persona) map[string]Token {
 		"tok_db": {TokenID: "tok_db", Kind: "db_cred", PlantedAt: "ssh:/etc/app/db.env", MazeNode: "lure_db",
 			MatchValue: dbPass, Sensitivity: 4, Path: "/etc/app/db.env", Hidden: true,
 			Content: fmt.Sprintf("DB_HOST=db.%s\nDB_PORT=5432\nDB_USER=app\nDB_PASS=%s\nDB_NAME=orders\n", p.Domain, dbPass)},
+		// Aetees shop decoy (divert proxy): the clone's admin password, leaked in a fake /.env.bak, and an invoice link
+		// planted in a fake order note. Either one used = the visitor read the honeypot's data.
+		"tok_aetees_admin": {TokenID: "tok_aetees_admin", Kind: "db_cred", PlantedAt: "aetees:/.env.bak", MazeNode: "lure_aetees_env",
+			MatchValue: "Bake" + randString(alnum, 10) + "!", Sensitivity: 4},
+		"tok_aetees_invoice": {TokenID: "tok_aetees_invoice", Kind: "url", PlantedAt: "aetees:admin order note", MazeNode: "lure_aetees_orders",
+			MatchValue: "/invoices/view/" + randString(hexdig, 16), Sensitivity: 3},
 		"tok_url": {TokenID: "tok_url", Kind: "url", PlantedAt: "ssh:/home/deploy/.bash_history", MazeNode: "",
 			MatchValue: "/t/tok_url", Sensitivity: 2, Path: "/home/deploy/.bash_history",
 			Content: fmt.Sprintf("ls -la\ncd /opt/deploy\ncurl -s http://s3.%s:8088/t/tok_url -o status.json\nexit\n", p.Domain)},
@@ -78,6 +84,7 @@ func tokens(p persona.Persona) map[string]Token {
 
 func main() {
 	rotate := flag.String("rotate", "", "token id to replace with a fresh value")
+	addMissing := flag.Bool("add-missing", false, "keep existing persona and token values; only add tokens that are new")
 	out := flag.String("out", envOr("SEED_OUT", "seed/out"), "output directory")
 	flag.Parse()
 	seed := os.Getenv("PERSONA_SEED")
@@ -86,6 +93,18 @@ func main() {
 	}
 	p := persona.Load(filepath.Join(*out, "persona.json"), seed)
 	toks := tokens(p)
+	if *addMissing {
+		old := map[string]Token{}
+		if b, err := os.ReadFile(filepath.Join(*out, "tokens.json")); err == nil {
+			_ = json.Unmarshal(b, &old)
+		}
+		for id, t := range toks {
+			if _, ok := old[id]; !ok {
+				old[id] = t
+			}
+		}
+		toks = old
+	}
 	if *rotate != "" {
 		old := map[string]Token{}
 		if b, err := os.ReadFile(filepath.Join(*out, "tokens.json")); err == nil {

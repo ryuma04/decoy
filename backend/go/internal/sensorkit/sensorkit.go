@@ -64,10 +64,14 @@ type Policy struct {
 	BlockedIPs     []string `json:"blocked_ips"`
 	KilledSessions []string `json:"killed_sessions"`
 	BurnedTokens   []string `json:"burned_tokens"`
+	DivertedIPs    []string `json:"diverted_ips"` // divert proxy: serve these from the honeypot clone
+	ReleasedIPs    []string `json:"released_ips"` // divert proxy: analyst says false positive, serve the real site
 	Rev            int64    `json:"rev"`
 	blocked        map[string]bool
 	killed         map[string]bool
 	burned         map[string]bool
+	diverted       map[string]bool
+	released       map[string]bool
 }
 
 func New(o Options) *Kit {
@@ -166,6 +170,8 @@ func (k *Kit) Policy() Policy {
 func (k *Kit) Blocked(ip string) bool       { return k.Policy().blocked[ip] }
 func (k *Kit) Killed(sessionID string) bool { return k.Policy().killed[sessionID] }
 func (k *Kit) Burned(tokenID string) bool   { return k.Policy().burned[tokenID] }
+func (k *Kit) Diverted(ip string) bool      { return k.Policy().diverted[ip] }
+func (k *Kit) Released(ip string) bool      { return k.Policy().released[ip] }
 
 func (k *Kit) pollPolicy(ctx context.Context) {
 	var p Policy
@@ -174,6 +180,7 @@ func (k *Kit) pollPolicy(ctx context.Context) {
 		return
 	}
 	p.blocked, p.killed, p.burned = toSet(p.BlockedIPs), toSet(p.KilledSessions), toSet(p.BurnedTokens)
+	p.diverted, p.released = toSet(p.DivertedIPs), toSet(p.ReleasedIPs)
 	k.policyMu.Lock()
 	if p.Rev != k.policy.Rev {
 		slog.Info("policy updated", "rev", p.Rev, "blocked", len(p.BlockedIPs), "killed", len(p.KilledSessions))

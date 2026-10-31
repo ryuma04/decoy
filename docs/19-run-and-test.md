@@ -84,6 +84,30 @@ decoys; with Docker: `docker compose --profile decoys --profile demo up`.
 5. **False positive / Confirmed** buttons — records analyst feedback (weights change only if `SCORER_LEARN=true`).
 6. Live events → click a row → **Explain** — plain-English explanation of one event.
 
+### 5. LLM fallback for commands no rule maps
+In the SSH decoy run commands our rules do not know, e.g. `iptables -F`, `chattr +i /tmp/.x`,
+`nohup ./miner -o pool:3333 &`. Within ~30 s the actor gets findings such as **T1562.001**, **T1222.002**,
+**T1496**, each marked `llm` in the ATT&CK panel with the model's one-line reason. They are worth 5 points each and
+never make an actor critical on their own. Navigation (`cd`, `ls`, `pwd`, `history`, `exit`) is never sent to the LLM.
+Without `LLM_*` in `.env` nothing happens (rules still run).
+
+### 6. Diversions (product website, analyst side)
+1. Dashboard → **Diversions** → enter an IP → **Divert to clone** → the row shows *In honeypot clone*.
+2. **Release** → the row shows *Released*. Same buttons on every actor page (*Aetees shop diversion* card) and as
+   recommended actions on incidents (`divert_ip`, `release_ip`).
+3. The divert proxy that acts on this is not built yet (docs/18 Task 9); the policy it will read is live now.
+
+### 7. Aetees lab shop
+`scripts/aetees-lab.sh` (first run ~3 min: copies `../references/aetee` into `.lab/aetees`, SQLite, one build).
+- http://localhost:3100 — the "real" shop (catalogue only)
+- http://localhost:3101 — the honeypot clone: same site, synthetic customers and orders; admin login
+  `admin` / the `tok_aetees_admin` value in `backend/go/seed/out/tokens.json`
+`REBUILD=1 scripts/aetees-lab.sh` rebuilds from the source.
+
+### 8. Deception tactics panel
+`SENSOR_ID=ssh-01 SENSOR_KEY=$KEY_SSH CORE_URL=http://127.0.0.1:8443 go run ./cmd/send-sample -ip 10.66.0.77 -tactic`
+(from `backend/go`, with `.env` loaded) → the new actor's page shows *Tactics applied (1)*: `sunk_cost_export`.
+
 ## If something looks wrong
 - Nothing on the dashboard: check `.logs/core.log` and the decoy log in `.logs/`; `scripts/dev-down.sh` then
   `scripts/dev-up.sh`.

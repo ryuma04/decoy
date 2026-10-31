@@ -4,6 +4,7 @@ package mitre
 import (
 	_ "embed"
 	"encoding/csv"
+	"sort"
 	"strings"
 )
 
@@ -34,6 +35,16 @@ func load() map[string]Technique {
 func Lookup(id string) (Technique, bool) {
 	t, ok := table[id]
 	return t, ok
+}
+
+// All returns every technique in the table (the LLM fallback's allow-list), sorted by id.
+func All() []Technique {
+	out := make([]Technique, 0, len(table))
+	for _, t := range table {
+		out = append(out, t)
+	}
+	sort.Slice(out, func(i, j int) bool { return out[i].ID < out[j].ID })
+	return out
 }
 
 // KillChainOrder lists tactics in the order the ATT&CK panel shows them.

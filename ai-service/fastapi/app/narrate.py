@@ -64,10 +64,22 @@ def user_message(req: NarrateRequest) -> str:
 
 # ---------------- providers ----------------
 
-def _call_openai_compat(cfg: Config, user: str, client: httpx.Client | None) -> str:
-    body = {"model": cfg.model, "temperature": 0.2, "max_tokens": MAX_TOKENS,
+def call_llm(cfg: Config, user: str, system: str, max_tokens: int, client: httpx.Client | None = None) -> str:
+    """One chat call with the configured provider; raises LLMOff / LLMError."""
+    if not cfg.enabled:
+        raise LLMOff()
+    if cfg.provider == "anthropic":
+        return _call_anthropic(cfg, user, system, max_tokens)
+    if cfg.provider == "openai_compat":
+        return _call_openai_compat(cfg, user, client, system, max_tokens)
+    raise LLMError(f"unknown LLM_PROVIDER {cfg.provider}")
+
+
+def _call_openai_compat(cfg: Config, user: str, client: httpx.Client | None,
+                        system: str = SYSTEM_PROMPT, max_tokens: int = MAX_TOKENS) -> str:
+    body = {"model": cfg.model, "temperature": 0.2, "max_tokens": max_tokens,
             "response_format": {"type": "json_object"},
-            "messages": [{"role": "system", "content": SYSTEM_PROMPT}, {"role": "user", "content": user}]}
+            "messages": [{"role": "system", "content": system}, {"role": "user", "content": user}]}
     headers = {"Authorization": f"Bearer {cfg.api_key}", "Content-Type": "application/json"}
     c = client or httpx.Client(timeout=TIMEOUT_S)
     try:
@@ -88,14 +100,14 @@ def _call_openai_compat(cfg: Config, user: str, client: httpx.Client | None) -> 
         raise LLMError("bad provider response") from e
 
 
-def _call_anthropic(cfg: Config, user: str) -> str:
+def _call_anthropic(cfg: Config, user: str, system: str = SYSTEM_PROMPT, max_tokens: int = MAX_TOKENS) -> str:
     try:
         import anthropic
     except ImportError as e:
         raise LLMError("anthropic package not installed") from e
     client = anthropic.Anthropic(api_key=cfg.api_key, timeout=TIMEOUT_S, max_retries=0)
     try:
-        msg = client.messages.create(model=cfg.model, max_tokens=MAX_TOKENS, system=SYSTEM_PROMPT,
+        msg = client.messages.create(model=cfg.model, max_tokens=max_tokens, system=system,
                                      messages=[{"role": "user", "content": user}])
     except anthropic.APIError as e:
         raise LLMError(f"provider error: {type(e).__name__}") from e

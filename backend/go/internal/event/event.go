@@ -84,7 +84,7 @@ var Types = set(
 	"conn.open", "conn.close", "auth.attempt", "shell.command", "file.read", "file.download", "file.upload",
 	"http.request", "k8s.api_call", "token.used", "input.suspicious", "scan.detected", "maze.unlock",
 	"sensor.heartbeat", "fw.deny", "fw.allow", "auth.real_failed", "auth.real_success", "auth.app_failed",
-	"auth.app_success", "deception.tactic",
+	"auth.app_success", "deception.tactic", "session.diverted", "session.released",
 )
 
 // ProductionServices may only appear with origin=production (07 §8).

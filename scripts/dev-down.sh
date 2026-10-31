@@ -16,10 +16,10 @@ kill_port() {
   return 0
 }
 for p in core.exe decoy-ssh.exe decoy-web.exe decoy-beacon.exe decoy-k8s.exe; do kill_name "$p"; done
-for port in 8000 8090 8443 2222 8080 8088 6443 3000; do kill_port "$port"; done
+for port in 8000 8090 8443 2222 8080 8088 6443 3000 3100 3101; do kill_port "$port"; done
 sleep 1
 left=""
-for port in 8000 8090 8443 2222 8080 8088 6443 3000; do
+for port in 8000 8090 8443 2222 8080 8088 6443 3000 3100 3101; do
   if command -v netstat.exe >/dev/null 2>&1 && netstat.exe -ano 2>/dev/null | tr -d '\r' | awk -v p=":$port" '$2 ~ p"$" && $4 == "LISTENING"' | grep -q .; then
     left="$left $port"
   fi

@@ -154,6 +154,11 @@ func (e *Engine) Process(ctx context.Context, ev store.StoredEvent) error {
 		}
 	}
 
+	// 3b. a decoy applied a cognitive tactic (08 §Cognitive): keep it for the actor's tactics panel
+	if ev.Type == "deception.tactic" {
+		e.recordTactic(ctx, ev, actorID, data)
+	}
+
 	// 4. rules: event scope (+ input risk for web inputs, + injected payload as a shell command)
 	var matches []hit
 	in := rules.Input{Type: ev.Type, Data: data, TokenSens: tokenSens}
@@ -178,6 +183,7 @@ func (e *Engine) Process(ctx context.Context, ev store.StoredEvent) error {
 				Data: map[string]any{"raw": g.Payload, "argv0": argv0}}))...)
 		}
 	}
+	eventMatches := len(matches) // session / actor rules below match on every event; the LLM fallback looks at these only
 	if e.Features != nil {
 		matches = append(matches, plain(e.Rules.Evaluate("session", rules.Input{Features: e.Features.Session(ev.SessionID)}))...)
 		matches = append(matches, plain(e.Rules.Evaluate("actor", rules.Input{Features: e.Features.Actor(actorID)}))...)
@@ -204,6 +210,11 @@ func (e *Engine) Process(ctx context.Context, ev store.StoredEvent) error {
 	if ports, ok := e.scan.observe(ev); ok {
 		matches = append(matches, plain(e.Rules.Evaluate("event", rules.Input{Type: "scan.detected",
 			Data: map[string]any{"ports": ports, "window_s": 60}}))...)
+	}
+
+	// 5b. nothing matched a command / k8s call: LLM fallback in the background (07 §4.3)
+	if eventMatches == 0 {
+		e.llmFallback(ev, actorID, llmAction(ev, data))
 	}
 
 	// 6. findings (once per actor per rule) → risk
@@ -523,4 +534,32 @@ func deref(s *string) string {
 		return ""
 	}
 	return *s
+}
+
+func (e *Engine) recordTactic(ctx context.Context, ev store.StoredEvent, actorID string, d map[string]any) {
+	str := func(k string) string { v, _ := d[k].(string); return v }
+	t := store.TacticRow{ActorID: actorID, BiasPattern: str("bias_pattern"), Tactic: str("tactic"), TS: ev.TS,
+		TriggerEventIDs: []string{ev.EventID}}
+	if t.Tactic == "" {
+		return
+	}
+	if t.BiasPattern == "" {
+		t.BiasPattern = "unspecified"
+	}
+	if l := str("lure_id"); l != "" {
+		t.LureID = &l
+	}
+	if ids, ok := d["trigger_event_ids"].([]any); ok {
+		for _, x := range ids {
+			if s, ok := x.(string); ok && len(t.TriggerEventIDs) < 20 {
+				t.TriggerEventIDs = append(t.TriggerEventIDs, s)
+			}
+		}
+	}
+	if eff, ok := d["effect"]; ok {
+		t.Effect, _ = json.Marshal(eff)
+	}
+	if err := e.Store.AddTactic(ctx, t); err != nil {
+		slog.Warn("record tactic", "err", err)
+	}
 }

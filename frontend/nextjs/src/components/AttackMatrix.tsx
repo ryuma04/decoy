@@ -62,7 +62,9 @@ export function AttackMatrix({ findings, onSelectEvent }: Props) {
                       <div className="mt-1.5 flex items-center gap-1.5 text-[11px] font-mono text-purple-700 bg-purple-50 p-1.5 rounded border border-purple-200">
                         <Sparkles className="h-3 w-3 shrink-0" />
                         <span>
-                          ML: {f.evidence.ml.label} ({(f.evidence.ml.risk * 100).toFixed(0)}%)
+                          {f.source === "llm"
+                            ? `LLM fallback (no rule matched): ${f.evidence.ml.top_features[0] ?? ""} (${(f.evidence.ml.confidence * 100).toFixed(0)}%)`
+                            : `ML: ${f.evidence.ml.label} (${(f.evidence.ml.risk * 100).toFixed(0)}%)`}
                         </span>
                         {f.evidence.ml.was_encoded && (
                           <span className="bg-purple-200 text-purple-900 px-1 rounded text-[9px] uppercase font-bold">
@@ -77,6 +79,7 @@ export function AttackMatrix({ findings, onSelectEvent }: Props) {
                         {f.source === "rule" && <Terminal className="h-3 w-3" />}
                         {f.source === "ml" && <Sparkles className="h-3 w-3 text-purple-600" />}
                         {f.source === "rule+ml" && <Cpu className="h-3 w-3 text-link" />}
+                        {f.source === "llm" && <Sparkles className="h-3 w-3 text-warning" />}
                         <span className="uppercase">{f.source}</span>
                       </span>
 

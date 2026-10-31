@@ -28,6 +28,8 @@ func (s *Server) IncidentRoutes(mux *http.ServeMux) {
 	mux.HandleFunc("GET /v1/incidents/{id}/report", authed(s.incidentReport))
 	mux.HandleFunc("POST /v1/incidents/{id}/feedback", authed(s.incidentFeedback))
 	mux.HandleFunc("GET /v1/events/{event_id}/explain", authed(s.explainEvent))
+	mux.HandleFunc("GET /v1/diversions", authed(s.listDiversions))
+	mux.HandleFunc("POST /v1/diversions", admin(s.diversionAction))
 }
 
 func (s *Server) listIncidents(w http.ResponseWriter, r *http.Request) {
@@ -95,6 +97,8 @@ func recommend(findings []store.FindingRow, sum dto.ActorSummary, tokensUsed []s
 	for _, ip := range sum.IPs {
 		if len(has) > 0 {
 			out = append(out, recommended{"block_ip", ip, "Stop further activity from this source on the decoys."})
+			out = append(out, recommended{"divert_ip", ip, "Serve this source the Aetees honeypot clone instead of the real shop (same URL)."})
+			out = append(out, recommended{"release_ip", ip, "False positive: send this visitor back to the real shop."})
 		}
 	}
 	for _, t := range tokensUsed {
@@ -236,7 +240,7 @@ func (s *Server) incidentAction(w http.ResponseWriter, r *http.Request) {
 	}
 	body.Target = strings.TrimSpace(body.Target)
 	switch body.Action {
-	case "block_ip", "unblock_ip":
+	case "block_ip", "unblock_ip", "divert_ip", "release_ip":
 		if net.ParseIP(body.Target) == nil {
 			writeError(w, http.StatusBadRequest, "bad_request", "target must be an IP address")
 			return
@@ -247,7 +251,7 @@ func (s *Server) incidentAction(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 	default:
-		writeError(w, http.StatusBadRequest, "bad_request", "action must be block_ip, unblock_ip, kill_session or rotate_token")
+		writeError(w, http.StatusBadRequest, "bad_request", "action must be block_ip, unblock_ip, divert_ip, release_ip, kill_session or rotate_token")
 		return
 	}
 	act, err := s.DB.ApplyAction(r.Context(), row.IncidentID, body.Action, body.Target, CurrentUser(r).UserID)
@@ -466,4 +470,43 @@ func deref(p *string) string {
 		return ""
 	}
 	return *p
+}
+
+// listDiversions shows who the divert proxy serves from the honeypot clone, and who was released (09 §Recovery).
+func (s *Server) listDiversions(w http.ResponseWriter, r *http.Request) {
+	ds, err := s.DB.Diversions(r.Context())
+	if err != nil {
+		writeError(w, http.StatusServiceUnavailable, "store_unavailable", "try again")
+		return
+	}
+	writeJSON(w, http.StatusOK, map[string]any{"items": ds})
+}
+
+// diversionAction diverts an IP to the clone or releases it to the real shop, without needing an incident.
+func (s *Server) diversionAction(w http.ResponseWriter, r *http.Request) {
+	var body struct {
+		IP     string `json:"ip"`
+		Action string `json:"action"` // divert | release
+	}
+	if !readJSON(w, r, &body) {
+		return
+	}
+	body.IP = strings.TrimSpace(body.IP)
+	if net.ParseIP(body.IP) == nil {
+		writeError(w, http.StatusBadRequest, "bad_request", "ip must be an IP address")
+		return
+	}
+	if body.Action != "divert" && body.Action != "release" {
+		writeError(w, http.StatusBadRequest, "bad_request", "action must be divert or release")
+		return
+	}
+	act, err := s.DB.ApplyAction(r.Context(), "", body.Action+"_ip", body.IP, CurrentUser(r).UserID)
+	if err != nil {
+		writeError(w, http.StatusServiceUnavailable, "store_unavailable", "action not applied; try again")
+		return
+	}
+	out := map[string]any{"action_id": act.ActionID, "action": act.Action, "target": act.Target, "status": act.Status,
+		"requested_by": CurrentUser(r).Email, "ts": act.TS.UTC()}
+	s.Bus.Publish("incident", out)
+	writeJSON(w, http.StatusOK, out)
 }

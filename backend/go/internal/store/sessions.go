@@ -121,6 +121,7 @@ func (s *Store) MergeActors(ctx context.Context, into, from string) error {
 			`DELETE FROM findings f WHERE f.actor_id::text = $2 AND EXISTS (SELECT 1 FROM findings g WHERE g.actor_id::text = $1 AND g.rule_id = f.rule_id)`,
 			`UPDATE findings SET actor_id = $1 WHERE actor_id::text = $2`,
 			`UPDATE token_hits SET actor_id = $1 WHERE actor_id::text = $2`,
+			`UPDATE deception_tactics SET actor_id = $1 WHERE actor_id::text = $2`,
 			`DELETE FROM maze_state m WHERE m.actor_id::text = $2 AND EXISTS (SELECT 1 FROM maze_state n WHERE n.actor_id::text = $1 AND n.node_id = m.node_id)`,
 			`UPDATE maze_state SET actor_id = $1 WHERE actor_id::text = $2`,
 			`UPDATE actors SET first_seen = LEAST(first_seen, (SELECT first_seen FROM actors WHERE actor_id::text = $2)),

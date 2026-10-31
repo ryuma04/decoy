@@ -7,8 +7,10 @@ from fastapi.concurrency import run_in_threadpool
 from fastapi.responses import JSONResponse
 
 from app import narrate as narr
+from app import technique as tech
 from app.input_model import get_model
-from app.schemas import ClassifyInputRequest, ClassifyInputResponse, NarrateRequest, NarrateResponse
+from app.schemas import (ClassifyInputRequest, ClassifyInputResponse, MapTechniqueRequest, MapTechniqueResponse,
+                         NarrateRequest, NarrateResponse)
 
 log = logging.getLogger("ml")
 
@@ -56,3 +58,14 @@ async def narrate(req: NarrateRequest):
     if out.get("guard"):
         log.info("narrate guard kind=%s ref=%s checks=%s", req.kind, req.ref_id, out["guard"])
     return out
+
+
+@app.post("/ml/v1/map-technique", response_model=MapTechniqueResponse)
+async def map_technique(req: MapTechniqueRequest):
+    try:
+        return await run_in_threadpool(tech.map_technique, req)
+    except narr.LLMOff:
+        return _error(503, "llm_off", "LLM_API_KEY / LLM_MODEL not set; no fallback mapping")
+    except narr.LLMError as e:
+        log.warning("map-technique failed service=%s: %s", req.service, e)
+        return _error(502, "llm_error", str(e))

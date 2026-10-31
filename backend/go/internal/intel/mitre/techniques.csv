@@ -17,3 +17,34 @@ T1140,Deobfuscate/Decode Files or Information,TA0005,Defense Evasion
 T1613,Container and Resource Discovery,TA0007,Discovery
 T1190,Exploit Public-Facing Application,TA0001,Initial Access
 T1041,Exfiltration Over C2 Channel,TA0010,Exfiltration
+# allow-list for the LLM fallback (07 §4.3): techniques an operator on a Linux / web / k8s decoy plausibly uses
+T1595.003,Wordlist Scanning,TA0043,Reconnaissance
+T1003.008,/etc/passwd and /etc/shadow,TA0006,Credential Access
+T1007,System Service Discovery,TA0007,Discovery
+T1016,System Network Configuration Discovery,TA0007,Discovery
+T1018,Remote System Discovery,TA0007,Discovery
+T1033,System Owner/User Discovery,TA0007,Discovery
+T1049,System Network Connections Discovery,TA0007,Discovery
+T1057,Process Discovery,TA0007,Discovery
+T1069.001,Local Groups,TA0007,Discovery
+T1083,File and Directory Discovery,TA0007,Discovery
+T1124,System Time Discovery,TA0007,Discovery
+T1497.001,System Checks,TA0005,Defense Evasion
+T1518,Software Discovery,TA0007,Discovery
+T1059.006,Python,TA0002,Execution
+T1136.001,Local Account,TA0003,Persistence
+T1543.002,Systemd Service,TA0003,Persistence
+T1548.003,Sudo and Sudo Caching,TA0004,Privilege Escalation
+T1070.003,Clear Command History,TA0005,Defense Evasion
+T1070.004,File Deletion,TA0005,Defense Evasion
+T1222.002,Linux and Mac File and Directory Permissions Modification,TA0005,Defense Evasion
+T1562.001,Disable or Modify Tools,TA0005,Defense Evasion
+T1560.001,Archive via Utility,TA0009,Collection
+T1005,Data from Local System,TA0009,Collection
+T1048,Exfiltration Over Alternative Protocol,TA0010,Exfiltration
+T1071.001,Web Protocols,TA0011,Command and Control
+T1090,Proxy,TA0011,Command and Control
+T1572,Protocol Tunneling,TA0011,Command and Control
+T1021.004,SSH,TA0008,Lateral Movement
+T1496,Resource Hijacking,TA0040,Impact
+T1485,Data Destruction,TA0040,Impact

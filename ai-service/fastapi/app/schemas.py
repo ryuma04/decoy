@@ -69,3 +69,25 @@ class NarrateResponse(BaseModel):
     model: str
     prompt_hash: str
     guard: dict[str, str] = {}
+
+
+class AllowedTechnique(BaseModel):
+    id: str = Field(max_length=12)
+    name: str = Field(max_length=120)
+
+
+class MapTechniqueRequest(BaseModel):
+    service: str = Field(max_length=20)
+    event_type: str = Field(max_length=40)
+    action: str = Field(max_length=2000)
+    allowed: list[AllowedTechnique] = Field(min_length=1, max_length=80)
+
+
+class MapTechniqueResponse(BaseModel):
+    technique: str | None
+    confidence: float
+    reason: str
+    source: Literal["llm"] = "llm"
+    model: str
+    prompt_hash: str
+    cached: bool = False

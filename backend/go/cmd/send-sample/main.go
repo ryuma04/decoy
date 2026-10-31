@@ -16,6 +16,7 @@ import (
 
 func main() {
 	ip := flag.String("ip", "10.66.0.23", "source IP to report")
+	tactic := flag.Bool("tactic", false, "also send a deception.tactic event (tests the actor's tactics panel)")
 	flag.Parse()
 	cfg, err := config.LoadSensor(":0")
 	if err != nil {
@@ -32,6 +33,10 @@ func main() {
 	for _, c := range []string{"whoami", "pwd", "ls -la"} {
 		s.Event("shell.command", "ssh_entry", map[string]any{"raw": c, "argv0": c[:2], "cwd": "/home/deploy", "exit": 0},
 			&event.Timing{SincePrevMS: 1500, Keystrokes: len(c)}, nil)
+	}
+	if *tactic {
+		s.Event("deception.tactic", "ssh_entry", map[string]any{"tactic": "sunk_cost_export", "bias_pattern": "sunk_cost",
+			"lure_id": "lure_backup", "effect": map[string]any{"polls": 7, "seconds_spent": 95}}, nil, nil)
 	}
 	s.Event("conn.close", "ssh_entry", map[string]any{"duration_ms": 4000, "reason": "client"}, nil, nil)
 	time.Sleep(1500 * time.Millisecond) // one flush interval
