@@ -384,3 +384,23 @@ func (s *Store) Timeseries(ctx context.Context, metric string, since time.Time, 
 	}
 	return out, rows.Err()
 }
+
+
+// SaveNarration stores a generated or templated narrative (09 Readable message text).
+func (s *Store) SaveNarration(ctx context.Context, kind, refID, factsHash, headline, body string, bullets []string, source string, model *string) error {
+	b, err := json.Marshal(bullets)
+	if err != nil {
+		b = []byte("[]")
+	}
+	_, err = s.Pool.Exec(ctx, `
+		INSERT INTO narrations (kind, ref_id, facts_hash, headline, body, bullets, source, model, created_at)
+		VALUES ($1, $2, $3, $4, $5, $6, $7, $8, now())
+		ON CONFLICT (kind, ref_id, facts_hash) DO UPDATE SET
+			headline = EXCLUDED.headline,
+			body = EXCLUDED.body,
+			bullets = EXCLUDED.bullets,
+			source = EXCLUDED.source,
+			model = EXCLUDED.model`,
+		kind, refID, factsHash, headline, body, b, source, model)
+	return err
+}

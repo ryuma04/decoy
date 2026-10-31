@@ -16,6 +16,7 @@ import (
 	"syscall"
 	"time"
 
+	"github.com/ryuma04/decoy/backend/internal/alert"
 	"github.com/ryuma04/decoy/backend/internal/api"
 	"github.com/ryuma04/decoy/backend/internal/bus"
 	"github.com/ryuma04/decoy/backend/internal/config"
@@ -127,8 +128,16 @@ func serve(ctx context.Context, cfg config.Core) error {
 	feat := features.New()
 	eng := &engine.Engine{Store: st, Bus: b, Rules: rs, ML: ml, Maze: mc, Features: feat}
 	go eng.Run(ctx)
-	go (&incident.Manager{Store: st, Bus: b}).Run(ctx)
 	narrator := &narrate.Narrator{ML: ml, MaxPerHour: cfg.NarrateMaxHr}
+	notifier := alert.NewNotifier(alert.Config{
+		DiscordURL:   cfg.DiscordURL,
+		SlackURL:     cfg.SlackURL,
+		DashboardURL: cfg.DashboardURL,
+		Narrator:     narrator,
+		Store:        st,
+	})
+	go notifier.Run(ctx)
+	go (&incident.Manager{Store: st, Bus: b, Notify: notifier.Notify}).Run(ctx)
 	slog.Info("intel engine started", "rules", len(rs.Rules), "ml", ml.Enabled())
 
 	sensorMux := http.NewServeMux()

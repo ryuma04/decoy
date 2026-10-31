@@ -9,11 +9,11 @@ can write them directly. Keep this list current: tick items when done, add new o
 | 1 | SSH decoy network server (`internal/decoy/ssh/server.go`, `cmd/decoy-ssh`): `x/crypto/ssh` server, password + public-key callbacks emitting `auth.attempt`, PTY/shell/exec channels, idle 10 min / cap 30 min / 500 commands, policy checks | 06 §1, 08 limits | `sensorkit` (sessions, events, policy), `decoy/ssh` `LineEditor`, `Shell`, `BaseTree`, `persona` | done (Antigravity) |
 | 2 | Web decoy (`internal/decoy/web`, `cmd/decoy-web`) | 06 §2 | `sensorkit`, persona | |
 | 3 | Kubernetes API decoy (`internal/decoy/k8s`, `cmd/decoy-k8s`) | 06 §3 | `sensorkit`, persona | |
-| 4 | Beacon (`internal/decoy/beacon`, `cmd/decoy-beacon`) | 06 §4 | `sensorkit` | |
+| 4 | Beacon (`internal/decoy/beacon`, `cmd/decoy-beacon`) | 06 §4 | `sensorkit` | done (Antigravity) |
 | 5 | Per-session / per-actor features and behaviour class (`internal/intel/features`, `internal/intel/behaviour`) | 07 §3, §7 | rule engine reads `Features map[string]float64` (`internal/intel/rules`); `BehaviourDetail` type in 04 | done (Antigravity) |
 | 6 | Dashboard mock fixtures (`frontend/nextjs/src/mocks/`). Pages still to build: overview, actors, actor profile, incidents, maze, honeytokens, sensors, scorer | 11, examples in 04, demo story in 13 | Built and working against the real core: login, live events page with SSE + event drawer, `lib/api.ts`, `lib/stream.tsx`, `lib/format.ts`, `/api/stream` pass-through, DESIGN.md tokens in `globals.css` | |
 | 7 | `attack.sh` demo script and attacker container | 13 | decoys from rows 1–4 | |
-| 8 | Discord / Slack notifiers + send queue with retries (`internal/alert/notify.go`) | 09 §Notification policy, §Discord payload | `internal/alert/policy.go` (severity → channel, cooldown, colours; built), narration in the ML service | |
+| 8 | Discord / Slack notifiers + send queue with retries (`internal/alert/notify.go`) | 09 §Notification policy, §Discord payload | `internal/alert/policy.go` (severity → channel, cooldown, colours; built), narration in the ML service | done (Antigravity) |
 
 Built since (verified end to end on Neon, 2026-10-31): intel engine (`internal/intel/engine`: fingerprints,
 symmetric credential lineage, correlation + merges, honeytoken hits, port sweep, rules, findings, risk), input risk

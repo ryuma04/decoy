@@ -17,20 +17,10 @@ import (
 )
 
 // Incident matches `Incident` in 04 §B.
-type Incident struct {
-	IncidentID string    `json:"incident_id"`
-	ActorID    string    `json:"actor_id"`
-	ActorLabel string    `json:"actor_label"`
-	Severity   string    `json:"severity"`
-	Status     string    `json:"status"`
-	Title      string    `json:"title"`
-	OpenedAt   time.Time `json:"opened_at"`
-	UpdatedAt  time.Time `json:"updated_at"`
-	RiskScore  int       `json:"risk_score"`
-}
+type Incident = alert.Incident
 
 // NotifyFunc sends one notification on the chosen channel. Nil = log only.
-type NotifyFunc func(ctx context.Context, ch alert.Channel, inc Incident, actor dto.ActorSummary) error
+type NotifyFunc = alert.NotifyFunc
 
 type Manager struct {
 	Store  *store.Store

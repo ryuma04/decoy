@@ -1,7 +1,28 @@
 // Package alert turns incident changes into notifications (09): who gets told, when, and with what text.
 package alert
 
-import "time"
+import (
+	"context"
+	"time"
+
+	"github.com/ryuma04/decoy/backend/internal/dto"
+)
+
+// Incident matches `Incident` in 04 §B.
+type Incident struct {
+	IncidentID string    `json:"incident_id"`
+	ActorID    string    `json:"actor_id"`
+	ActorLabel string    `json:"actor_label"`
+	Severity   string    `json:"severity"`
+	Status     string    `json:"status"`
+	Title      string    `json:"title"`
+	OpenedAt   time.Time `json:"opened_at"`
+	UpdatedAt  time.Time `json:"updated_at"`
+	RiskScore  int       `json:"risk_score"`
+}
+
+// NotifyFunc sends one notification on the chosen channel. Nil = log only.
+type NotifyFunc func(ctx context.Context, ch Channel, inc Incident, actor dto.ActorSummary) error
 
 var rank = map[string]int{"low": 0, "medium": 1, "high": 2, "critical": 3}
 
