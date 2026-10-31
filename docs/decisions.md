@@ -4,6 +4,7 @@ Newest first. Format: date · decision · why · alternatives rejected.
 
 | Date | Decision | Why | Rejected |
 | --- | --- | --- | --- |
+| 2026-10-31 | Database decoy = own Go Postgres wire-protocol server (`decoy-db`) with fake tables; accepts only the planted `tok_db` credential (+ persona weak postgres password); writes and file/command functions always denied | Completes the maze path lure_db → svc_db; proves credential theft → use → data access in one actor; nothing is ever executed | Real Postgres with fake data (a real server can be abused); MySQL protocol |
 | 2026-10-31 | One trained model only: input-risk (TF-IDF/LR) scoring each attacker-typed value 0–1 plus attack label; risk scales finding points | Best data story (generated + licensed payload lists), beats regex on encoded input; type is needed for MITRE and titles | Command model (echoed rules), behaviour model (no data in time), CodeGuard (built for code snippets) |
 | 2026-10-31 | LLM narration turns facts into plain English for Discord/Slack, actor card, incident and on-demand Explain; Go templates in core as fallback; 3 s budget for alerts | Analysts and judges read stories, not event types; alerts never depend on the LLM | LLM per stream event (cost/latency); templates in the ML service (ML off would lose readable alerts) |
 | 2026-10-31 | Narration is guarded: attacker strings quoted as data, mentions stripped, every IP/token/label in output must exist in facts | Attackers control part of the input; Discord mentions are an abuse path | Trusting model output as is |

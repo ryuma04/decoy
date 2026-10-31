@@ -48,6 +48,12 @@ func llmAction(ev store.StoredEvent, d map[string]any) string {
 			return ""
 		}
 		return raw
+	case "db.query":
+		q := strings.TrimSpace(str("query"))
+		if q == "" || len(q) > 500 || str("kind") == "session" {
+			return ""
+		}
+		return q
 	case "k8s.api_call":
 		return strings.TrimSpace(strings.Join([]string{str("verb"), str("resource"), str("namespace"), str("path")}, " "))
 	}

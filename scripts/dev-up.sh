@@ -15,7 +15,7 @@ wait_for() { # name url
 }
 
 # name:sensor-id:key-var:port for every decoy whose cmd exists (k8s joins automatically once it is built)
-DECOYS="ssh:ssh-01:KEY_SSH:2222 web:web-01:KEY_WEB:8080 beacon:beacon-01:KEY_BEACON:8088 k8s:k8s-01:KEY_K8S:6443"
+DECOYS="ssh:ssh-01:KEY_SSH:2222 web:web-01:KEY_WEB:8080 beacon:beacon-01:KEY_BEACON:8088 k8s:k8s-01:KEY_K8S:6443 db:db-01:KEY_DB:${DB_DECOY_PORT:-5433}"
 
 echo "[1/5] building Go binaries"
 (cd backend/go && go build -o bin/core.exe ./cmd/core && go build -o bin/seed.exe ./cmd/seed \
@@ -42,6 +42,7 @@ for d in $DECOYS; do
   [ -f "backend/go/bin/decoy-$n.exe" ] || { echo "  decoy-$n not built yet, skipped"; continue; }
   mkdir -p ".data/$n"
   (cd backend/go && SENSOR_ID="$sid" SENSOR_KEY="${!keyvar}" CORE_URL=http://127.0.0.1:8443 LISTEN_ADDR=":$port" \
+    ADVERTISED_PORT="$([ "$n" = db ] && echo 5432)" \
     DATA_DIR="$ROOT/.data/$n" SEED_DIR="$ROOT/backend/go/seed" exec nohup "./bin/decoy-$n.exe") > ".logs/decoy-$n.log" 2>&1 < /dev/null &
 done
 sleep 3
@@ -54,5 +55,6 @@ wait_for dashboard http://127.0.0.1:3000/login
 echo
 echo "Dashboard: http://localhost:3000   login: $SOC_ADMIN_EMAIL  (password: SOC_ADMIN_PASSWORD in .env)"
 echo "Decoys:    SSH ssh -p 2222 deploy@localhost (deploy_password in backend/go/seed/out/persona.json)"
-echo "           Web http://localhost:8080   Beacon http://localhost:8088   K8s https://localhost:6443 (when built)"
+echo "           Web http://localhost:8080   Beacon http://localhost:8088   K8s https://localhost:6443"
+echo "           DB  psql -h localhost -p ${DB_DECOY_PORT:-5433} -U app orders (password: tok_db in backend/go/seed/out/tokens.json)"
 echo "Logs:      .logs/   Stop: scripts/dev-down.sh"

@@ -48,3 +48,6 @@ T1572,Protocol Tunneling,TA0011,Command and Control
 T1021.004,SSH,TA0008,Lateral Movement
 T1496,Resource Hijacking,TA0040,Impact
 T1485,Data Destruction,TA0040,Impact
+T1213,Data from Information Repositories,TA0009,Collection
+T1555,Credentials from Password Stores,TA0006,Credential Access
+T1059,Command and Scripting Interpreter,TA0002,Execution

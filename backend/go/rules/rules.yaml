@@ -192,3 +192,44 @@
   stage: lateral
   when: { feature: services_visited, gte: 3 }
   points: 15
+
+# Database decoy (decoy-db): every query is a db.query event with data.query / data.kind
+- id: db_recon
+  title: Database reconnaissance (version, catalogs, users)
+  scope: event
+  stage: post_access
+  when: { type: db.query, data_regex: { kind: '^recon$' } }
+  technique: T1082
+  points: 5
+
+- id: db_data_read
+  title: Read business data from the decoy database
+  scope: event
+  stage: post_access
+  when: { type: db.query, data_regex: { table: '^(customers|orders|payments|staff_users)$', kind: '^read$' } }
+  technique: T1213
+  points: 15
+
+- id: db_credential_dump
+  title: Read staff password hashes from the database
+  scope: event
+  stage: post_access
+  when: { type: db.query, data_regex: { table: '^staff_users$' } }
+  technique: T1555
+  points: 15
+
+- id: db_privileged
+  title: Tried server-side file or command access through the database
+  scope: event
+  stage: post_access
+  when: { type: db.query, data_regex: { query: '(?i)copy\b.*\bprogram|pg_read_file|pg_read_binary_file|pg_ls_dir|lo_import|lo_export|pg_shadow|pg_authid' } }
+  technique: T1059
+  points: 20
+
+- id: db_tamper
+  title: Tried to modify or destroy database data
+  scope: event
+  stage: post_access
+  when: { type: db.query, data_regex: { query: '(?i)^\s*(delete|drop|truncate|update|alter)\b' } }
+  technique: T1485
+  points: 20

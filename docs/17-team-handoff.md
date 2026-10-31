@@ -22,6 +22,11 @@ from core (`intel/inputrisk`, `mlclient` with breaker), incidents (`internal/inc
 endpoints in 04 §B except `/tactics`, `/generated-lures`, `/recovery`, `cmd/seed`, adaptive maze (`internal/maze`,
 real maze-view), log parsers + `cmd/log-collector`.
 
+Built 2026-10-31 (evening): database decoy `cmd/decoy-db` (Postgres wire protocol, fake customers / orders /
+payments / staff_users, accepts `tok_db`, rules `db_recon`, `db_data_read`, `db_credential_dump`, `db_privileged`,
+`db_tamper`), LLM fallback for unmapped commands and queries (`intel/engine/llmfallback.go`, `/ml/v1/map-technique`),
+Diversions page + `/v1/diversions`, deception tactics stored and shown, Aetees lab shop (`scripts/aetees-lab.sh`).
+
 Still open (not attempted yet; specified in the docs):
 
 | # | Part | Spec | Plugs into |

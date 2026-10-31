@@ -12,7 +12,7 @@ nodes:
   - {id: svc_k8s,         kind: service, service: k8s,    label: K8s API}
   - {id: lure_ci_secret,  kind: lure,    theme: ci,       label: ci-jenkins-token secret, default: hidden}
   - {id: svc_jenkins,     kind: service, service: web,    label: Jenkins decoy, stretch: true}
-  - {id: svc_db,          kind: service, service: null,    label: DB decoy,      stretch: true}
+  - {id: svc_db,          kind: service, service: db,      label: Postgres decoy}
 edges:
   - {from: web_entry, to: lure_backup}
   - {from: lure_backup, to: ssh_entry, label: uses leaked key}

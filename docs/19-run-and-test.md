@@ -17,7 +17,9 @@ Needs `.env` (copy `.env.example`): `DATABASE_URL`, `JWT_SECRET`, `SOC_ADMIN_*`,
 | SSH decoy | `ssh -p 2222 deploy@localhost` — password = `deploy_password` in `backend/go/seed/out/persona.json` |
 | Web decoy | http://localhost:8080 |
 | Beacon | http://localhost:8088 |
-| Kubernetes decoy | https://localhost:6443 (once built) |
+| Kubernetes decoy | https://localhost:6443 |
+| Database decoy | `psql -h localhost -p 5433 -U app orders` — password = `tok_db` in `backend/go/seed/out/tokens.json` (5433 because a local Postgres usually owns 5432; `DB_DECOY_PORT` changes it) |
+| Aetees lab shop | http://localhost:3100 (real), http://localhost:3101 (honeypot clone) — `scripts/aetees-lab.sh` |
 
 Keep the dashboard **Live Events** page open on one screen while you do the steps below.
 
@@ -83,6 +85,22 @@ decoys; with Docker: `docker compose --profile decoys --profile demo up`.
 4. **Download report** — markdown incident report with IOCs, ATT&CK table, linked sessions and fixes.
 5. **False positive / Confirmed** buttons — records analyst feedback (weights change only if `SCORER_LEARN=true`).
 6. Live events → click a row → **Explain** — plain-English explanation of one event.
+
+### 4b. Database decoy — stolen DB password used
+The DB password is planted in `/etc/app/db.env` (SSH decoy, after the maze unlocks it) and in the web decoy's `/.env`.
+```bash
+psql -h localhost -p 5433 -U app orders          # password: the tok_db value
+select version();
+\dt
+select * from customers limit 5;
+select username, role, password_hash from staff_users;
+copy customers to program 'id';                  # denied (42501), logged
+drop table orders;                               # denied (42501), logged
+```
+Expect: `auth.attempt` + `token.used` (db_login) → the actor goes **critical** and merges with the actor that stole the
+password (credential lineage); `db.query` rows; findings **T1082** (db_recon), **T1213** (business data read),
+**T1555** (password hashes), **T1059** (COPY … PROGRAM), **T1485** (DROP); the maze shows `svc_db` visited.
+No psql installed? Any Postgres client works (DBeaver, pgAdmin, Python psycopg).
 
 ### 5. LLM fallback for commands no rule maps
 In the SSH decoy run commands our rules do not know, e.g. `iptables -F`, `chattr +i /tmp/.x`,

@@ -31,7 +31,7 @@ Changing this file requires telling the whole team.
 | `event_id` | ULID | yes | made by sensor; unique; retries are idempotent |
 | `ts` | RFC3339 ms UTC | yes | sensor clock; reject if > 5 min in future |
 | `sensor.id` | string | yes | must match the HMAC key id |
-| `sensor.service` | enum | yes | `ssh`, `web`, `dbadmin`, `k8s`, `beacon`, `engine`, `firewall`, `hostauth`, `appauth` |
+| `sensor.service` | enum | yes | `ssh`, `web`, `db`, `dbadmin`, `k8s`, `beacon`, `engine`, `firewall`, `hostauth`, `appauth` |
 | `origin` | enum | yes | `decoy` (decoys, engine) or `production` (external logs via `cmd/log-collector`, see 07 §8) |
 | `sensor.maze_node` | string | no | maze node the interaction belongs to |
 | `session.sensor_session_id` | string | yes | `<sensor.id>:<random>`; one per TCP connection (or per web cookie / per k8s token+IP for 30 min) |
@@ -59,6 +59,8 @@ Limits: envelope ≤ 64 KB; `data.raw` ≤ 4 KB (set `data.truncated: true` when
 | `file.upload` | ssh | `path`, `sha256`, `size` (content quarantined, never executed) |
 | `http.request` | web, k8s, beacon | `method`, `path`, `query` (object), `body_sample` (≤1 KB), `status`, `ua` |
 | `k8s.api_call` | k8s | `verb` (`get`,`list`,`create`,`delete`,`watch`), `resource`, `namespace`, `name`, `authenticated` |
+| `db.query` | db | `query` (≤ 1000 chars), `database`, `user`, `kind` (`recon`,`read`,`write`,`admin`,`session`,`unknown`), `table` (if any), `rows`, `error` (SQLSTATE, if the decoy refused) |
+| `session.diverted` / `session.released` | web (divert proxy) | `reason`, `severity` (`soft`,`hard`), `label` |
 | `token.used` | any | `token_id`, `token_kind`, `via` (e.g. `aws_api`, `k8s_bearer`, `ssh_key`, `url_fetch`, `db_login`) |
 | `input.suspicious` | web | `param`, `value`, `separator` (e.g. `;`), `payload` (part after separator) — set by decoy's cheap pre-check, engine re-checks |
 | `scan.detected` | engine | `ports` (int[]), `window_s` |

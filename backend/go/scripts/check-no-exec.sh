@@ -3,7 +3,7 @@
 set -eu
 cd "$(dirname "$0")/.."
 dirs=""
-for d in internal/decoy cmd/decoy-ssh cmd/decoy-web cmd/decoy-k8s cmd/decoy-beacon internal/sensorkit internal/fakefs; do
+for d in internal/decoy cmd/decoy-ssh cmd/decoy-web cmd/decoy-k8s cmd/decoy-beacon cmd/decoy-db internal/sensorkit internal/fakefs; do
   [ -d "$d" ] && dirs="$dirs $d"
 done
 [ -z "$dirs" ] && { echo "check-no-exec: no decoy code yet"; exit 0; }
