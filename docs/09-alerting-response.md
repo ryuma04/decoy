@@ -64,6 +64,45 @@ We never touch host firewalls or real infrastructure; `block_ip` is enforced by 
 **Recommended actions** in `IncidentDetail` are generated from findings, e.g. token used → "rotate token, block IP";
 ssh persistence → "kill session, block IP". Each one has a "why" sentence.
 
+## False-positive recovery (team proposal, `internal/recovery`)
+
+Scenario: lures inside a **real application** (conditional deception) can catch a legitimate user, for example a
+worker who clicked a lure link or mistyped into a decoy form. The honeypot records everything they did. If an analyst
+decides it was a real user, we return them to the real application **without losing their work**.
+
+### Flow
+
+1. **Record** (already happens): every action in the decoy is an event. For recovery we additionally store the
+   user's *intent* for a small set of recoverable action types: form submissions (e.g. "create support ticket",
+   "update profile field", "search"), page navigation and file requests.
+2. **Analyst marks False positive** (07 §6.5) and ticks "recover user session". The engine builds a
+   **recovery plan**: an ordered list of recoverable actions with their parameters, excluding anything not on the
+   allowlist (shell commands, credential use, downloads of lures, admin operations, anything containing injection
+   patterns).
+3. **Re-authentication:** the user is redirected to the real application's normal login (SSO/password + MFA if the app
+   has it). Nothing is replayed under the decoy session or with decoy credentials.
+4. **User confirmation:** the real app shows "We restored your pending actions: [list]. Submit?" The user confirms each
+   one (or all).
+5. **Automation executes** the confirmed actions through the real app's own API **as that user**, so the real
+   app's authorization, validation and audit apply. Implementation: a small Go `recovery-runner` calling the real
+   app's documented API; Playwright browser automation only if the app has no API.
+6. **Audit:** every replayed action is logged with recovery id, analyst id, user confirmation time and result; the
+   actor is closed as false positive and its source can be allowlisted.
+
+### Guardrails (why not replay automatically)
+
+| Risk | Guardrail |
+| --- | --- |
+| The "user" is actually an attacker who fooled the analyst; replay would run attacker actions on production | analyst approval **and** real-app re-authentication **and** user confirmation; only allowlisted, low-impact action types |
+| Replayed input contains an injection payload | each action re-checked by the injection rules; any hit removes it from the plan |
+| Replay runs with too many privileges | runs as the user, through the real app's API and permission checks; recovery-runner holds no admin credentials |
+| Duplicate side effects | each action has an idempotency key; replay once only |
+| Honeypot data leaks into production | lure values (honeytokens, decoy file contents) are never replayed |
+
+Demo version (hackathon): the `real-target` app exposes `POST /api/tickets` and `PATCH /api/profile`; a teammate as
+"real user" fills a support-ticket form on a lure page, is marked false positive, logs into the real app, confirms,
+and the ticket appears there. Full automatic replay without user confirmation is **not** built (16 future scope).
+
 ## Incident report (`internal/report`)
 
 `GET /v1/incidents/{id}/report?format=md` returns:

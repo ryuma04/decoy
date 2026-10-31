@@ -36,6 +36,10 @@ CREATE TABLE actors (
   behaviour_class text NOT NULL DEFAULT 'unknown',  -- human_like|scripted|ai_assisted|agent_like|unknown
   behaviour_score jsonb,                         -- {"human_like":0.1,"scripted":0.2,"agent_like":0.7,"source":"rules|ml"}
   interest        jsonb NOT NULL DEFAULT '{"cloud":0,"k8s":0,"db":0,"ci":0}',
+  stage_scores    jsonb NOT NULL DEFAULT '{"recon":0,"access":0,"post_access":0,"lateral":0}',
+  risk_breakdown  jsonb,                         -- {"p":0.93,"z":2.6,"weights_version":3,"override":"token_used","by_stage":{...}}
+  tools           jsonb NOT NULL DEFAULT '[]',   -- [{"tool":"hydra","first_seen":"…","event_id":"…"}]
+  touched_production boolean NOT NULL DEFAULT false,
   merged_into     uuid REFERENCES actors
 );
 CREATE SEQUENCE actor_label_seq;
@@ -64,6 +68,7 @@ CREATE TABLE events (
   ts          timestamptz NOT NULL,
   received_at timestamptz NOT NULL DEFAULT now(),
   type        text NOT NULL,
+  origin      text NOT NULL DEFAULT 'decoy',  -- decoy | production
   sensor_id   text NOT NULL,
   service     text NOT NULL,
   src_ip      inet NOT NULL,
@@ -114,6 +119,7 @@ CREATE TABLE findings (
   technique   text,                            -- T1552.001
   points      int NOT NULL,
   confidence  real NOT NULL DEFAULT 1.0,
+  stage       text NOT NULL,                   -- recon | access | post_access | lateral
   source      text NOT NULL DEFAULT 'rule',    -- rule | ml | rule+ml
   evidence    jsonb NOT NULL,                  -- {"event_ids":[…],"matched":"cat ~/.aws/credentials","ml":{…}}
   ts          timestamptz NOT NULL
@@ -168,6 +174,74 @@ CREATE TABLE maze_state (
   unlocked_by text,
   updated_at  timestamptz NOT NULL,
   PRIMARY KEY (actor_id, node_id)
+);
+
+CREATE TABLE scorer_weights (                   -- single-neuron risk combiner (07 §6)
+  version     serial PRIMARY KEY,
+  weights     jsonb NOT NULL,                  -- {"recon":1.0,"access":2.0,"post_access":3.0,"lateral":4.0}
+  bias        real NOT NULL,
+  learning_rate real NOT NULL DEFAULT 0.05,
+  feedback_id bigint,                          -- which feedback produced this version (null = initial)
+  created_at  timestamptz NOT NULL DEFAULT now(),
+  active      boolean NOT NULL DEFAULT true
+);
+INSERT INTO scorer_weights (weights, bias) VALUES
+  ('{"recon":1.0,"access":2.0,"post_access":3.0,"lateral":4.0}', -3.0);
+
+CREATE TABLE risk_feedback (                    -- analyst labels; also the future NN training set
+  feedback_id  bigserial PRIMARY KEY,
+  actor_id     uuid REFERENCES actors,
+  incident_id  uuid REFERENCES incidents,
+  label        smallint NOT NULL CHECK (label IN (0,1)),   -- 1 confirmed attacker, 0 false positive
+  stage_scores jsonb NOT NULL,
+  features     jsonb NOT NULL,                 -- raw per-actor features snapshot (for future NN, 16)
+  predicted_p  real NOT NULL,
+  author       uuid REFERENCES users,
+  allowlisted  boolean NOT NULL DEFAULT false,
+  ts           timestamptz NOT NULL DEFAULT now()
+);
+
+CREATE TABLE allowlist (
+  cidr    cidr PRIMARY KEY,
+  reason  text NOT NULL,
+  added_by uuid REFERENCES users,
+  ts      timestamptz NOT NULL DEFAULT now()
+);
+
+CREATE TABLE generated_lures (
+  lure_id     text PRIMARY KEY,
+  actor_id    uuid REFERENCES actors,
+  theme       text NOT NULL,
+  path        text NOT NULL,
+  content     text NOT NULL,                   -- final, placeholders filled
+  model       text NOT NULL,
+  prompt_hash text NOT NULL,
+  raw_output  text NOT NULL,
+  guard       jsonb NOT NULL,                  -- {"ok":true,"checks":{...}}
+  critic      jsonb,
+  source      text NOT NULL,                   -- llm | template
+  created_at  timestamptz NOT NULL DEFAULT now()
+);
+
+CREATE TABLE deception_tactics (
+  tactic_id   bigserial PRIMARY KEY,
+  actor_id    uuid REFERENCES actors,
+  bias_pattern text NOT NULL,                  -- confirmation | sunk_cost | anchoring | urgency | authority
+  tactic      text NOT NULL,
+  lure_id     text,
+  trigger_event_ids text[] NOT NULL,
+  effect      jsonb,                           -- {"lure_taken":true,"seconds_to_take":42,"continued":true}
+  ts          timestamptz NOT NULL DEFAULT now()
+);
+
+CREATE TABLE recovery_plans (
+  recovery_id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
+  actor_id    uuid REFERENCES actors,
+  approved_by uuid REFERENCES users,
+  status      text NOT NULL DEFAULT 'pending', -- pending | awaiting_user | executed | cancelled
+  actions     jsonb NOT NULL,                  -- [{"type":"create_ticket","params":{...},"idempotency_key":"…","confirmed":false,"result":null}]
+  created_at  timestamptz NOT NULL DEFAULT now(),
+  executed_at timestamptz
 );
 
 CREATE VIEW iocs AS

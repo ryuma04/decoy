@@ -8,6 +8,7 @@ Changing this file requires telling the whole team.
 ```json
 {
   "schema": "dsoc.event/v1",
+  "origin": "decoy",
   "event_id": "01JC9Q7X3M2K8V5T0R4N6P1W2Z",
   "ts": "2026-11-14T09:02:11.481Z",
   "sensor": { "id": "ssh-01", "service": "ssh", "maze_node": "ssh_entry" },
@@ -30,7 +31,8 @@ Changing this file requires telling the whole team.
 | `event_id` | ULID | yes | made by sensor; unique; retries are idempotent |
 | `ts` | RFC3339 ms UTC | yes | sensor clock; reject if > 5 min in future |
 | `sensor.id` | string | yes | must match the HMAC key id |
-| `sensor.service` | enum | yes | `ssh`, `web`, `k8s`, `beacon`, `engine` |
+| `sensor.service` | enum | yes | `ssh`, `web`, `dbadmin`, `k8s`, `beacon`, `engine`, `firewall`, `hostauth`, `appauth` |
+| `origin` | enum | yes | `decoy` (decoys, engine) or `production` (external logs via `cmd/log-collector`, see 07 §8) |
 | `sensor.maze_node` | string | no | maze node the interaction belongs to |
 | `session.sensor_session_id` | string | yes | `<sensor.id>:<random>`; one per TCP connection (or per web cookie / per k8s token+IP for 30 min) |
 | `session.seq` | int | yes | starts at 0, +1 per event in session |
@@ -62,6 +64,13 @@ Limits: envelope ≤ 64 KB; `data.raw` ≤ 4 KB (set `data.truncated: true` when
 | `scan.detected` | engine | `ports` (int[]), `window_s` |
 | `maze.unlock` | engine | `actor_id`, `from_node`, `to_node`, `theme`, `reason` |
 | `sensor.heartbeat` | all | `version`, `uptime_s`, `active_sessions` |
+| `fw.deny` / `fw.allow` | log-collector (firewall) | `dst_ip`, `dst_port`, `proto`, `rule` |
+| `auth.real_failed` / `auth.real_success` | log-collector (host sshd) | `username`, `method`, `host` |
+| `auth.app_failed` / `auth.app_success` | log-collector (real app) | `username`, `ua`, `app` |
+
+External (`origin: production`) events use `session.sensor_session_id = "<sensor.id>:<src_ip>:<yyyymmddhh>"`
+(one pseudo-session per source IP per hour) and never carry passwords in clear: the collector stores
+`password_hash` (SHA-256, salted per deployment) so `decoy_cred_on_real` can match against decoy credentials hashed the same way.
 
 `timing` (SSH shell lines): `since_prev_ms` (gap since previous command finished printing), `keystrokes`,
 `edits` (backspace/delete/arrow edits), `paste` (true if ≥ 8 chars arrived in one read).
@@ -71,6 +80,7 @@ Limits: envelope ≤ 64 KB; `data.raw` ≤ 4 KB (set `data.truncated: true` when
 ```go
 type Envelope struct {
     Schema  string          `json:"schema"`
+    Origin  string          `json:"origin"`
     EventID string          `json:"event_id"`
     TS      time.Time       `json:"ts"`
     Sensor  Sensor          `json:"sensor"`

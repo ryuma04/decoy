@@ -12,9 +12,11 @@
 | 1:25 | (script/agent) `id; uname -a; find / -name "*.kube*"; cat ~/.aws/credentials` | discovery + cred search; risk climbs; kubeconfig lure **appears** (maze unlock) |
 | 1:50 | (script) `cat /opt/deploy/kubeconfig`; curl K8s API with token: list pods, secrets | T1613, T1552.007, high → Discord |
 | 2:10 | (script) SigV4 request with the lure AWS key to beacon | `token.used`, **critical**, Discord `@here` |
+| 2:20 | (script) tries the stolen decoy credential on the **real** login page of `real-target`; firewall logs its scan | Timeline shows "App login (production)" + firewall rows; finding "decoy credential used on real system"; badge **Touched production** |
 | 2:30 | Open actor profile | 3+ linked sessions graph, timeline, ATT&CK, behaviour = scripted |
 | 3:00 | Second terminal: teammate SSHs **from another IP** with the same key and types slowly | Joins ACT-0001 via `ssh_key` signal; behaviour shifts to human-like for that session |
 | 3:20 | Incident page → AI/template summary → `block_ip` | Next SSH attempt refused within 5 s |
+| 3:30 | On a separate test actor (teammate browsing normally), click **False positive** | Risk drops, toast shows new weights version |
 | 3:40 | Download report | Markdown report with IOCs and ATT&CK |
 
 Optional wow moment (only if M5 done and rehearsed): run an LLM agent against the decoys; show `agent_like`
@@ -47,6 +49,7 @@ so CI never hits real webhooks.
 | Gate | Pass criteria |
 | --- | --- |
 | G1 Pipeline | SSH command visible in UI < 2 s; event survives core restart (spool replay); duplicate batch is idempotent |
+| G2b Telemetry | log-collector parses all three sample log files; external events link to the attack actor; profile shows source, tools, behaviour, timeline |
 | G2 Intelligence | attack.sh produces 1 actor, ≥ 3 sessions, ≥ 1 non-IP link, ≥ 8 distinct techniques, risk ≥ 75 |
 | G3 Demo-ready | full table above works 3 times in a row from a clean `docker compose down -v`; Discord alerts; block works; report downloads; ML off still passes G2 |
 | G4 Signature | maze unlock visible live; behaviour class shown with features; ML models meet targets in 10 or are labelled experimental |

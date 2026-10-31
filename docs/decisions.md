@@ -4,6 +4,14 @@ Newest first. Format: date · decision · why · alternatives rejected.
 
 | Date | Decision | Why | Rejected |
 | --- | --- | --- | --- |
+| 2026-10-31 | Cognitive adaptive deception layer inside the honeypot: rule-based bias patterns → presentation tactics, max 1 per 5 min, effect measured as "lure taken / engagement continued" | Adds behaviour-aware deception honestly (patterns, not mind-reading) | Psychological profiling claims; ML bias detection |
+| 2026-10-31 | LLM dynamic lures: one generator + deterministic Go guards + optional critic, background generation, Go inserts honeytokens, template fallback | Dynamic honeypot without hallucination or demo risk | 3–4 voting agents (shared failure modes, latency) |
+| 2026-10-31 | False-positive recovery: analyst-approved, user re-authenticates and confirms, only allowlisted actions replayed via real app API as the user | Restores a real user's work without letting an attacker replay into production | Automatic replay of honeypot actions |
+| 2026-10-31 | Final risk = single neuron (logistic regression) over per-stage scores (recon, access, post-access, lateral) + hard overrides; weights updated only from analyst feedback | Explainable, ~30 lines of Go, no training data needed upfront, demo-safe | Multi-layer NN now (no labelled data, 6–10 h, black box) → future scope (16) |
+| 2026-10-31 | External telemetry (firewall, host SSH auth, real app login) enters through the same ingest pipeline via `cmd/log-collector`, `origin: production` | PS requires linking honeypot activity to other telemetry; reuses envelope, storage and timeline | Separate SIEM pipeline |
+| 2026-10-31 | External events link to decoy actors (same IP ±60 min, decoy credential reused on real system, real brute force, real success) but never create actors | Keeps production noise out; decoy = high-confidence anchor | Actors from firewall logs alone |
+| 2026-10-31 | Attacker profile has four parts: source, tools, behaviour, timeline; tool detection from UA, SSH banner, commands, rates | Matches PS wording; judges can check each part | — |
+| 2026-10-31 | For real systems the SOC only recommends actions; lab decoys are the only things it blocks | Safety | Automated production response |
 | 2026-10-30 | Own Go SSH decoy with emulated shell | Wisp SSH is credentials-only; Cowrie is Python and reference-only | Cowrie as base; Wisp as base |
 | 2026-10-30 | Core is one Go process with an in-process bus | Fewer moving parts for a hackathon; splittable later | Microservices, Kafka/NATS |
 | 2026-10-30 | SSE for live UI | One-way traffic, auto-reconnect, stdlib only | WebSockets |

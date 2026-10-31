@@ -62,6 +62,12 @@ last seen. Sort by risk / last seen. Live updates from `actor` SSE messages.
 6. **Maze panel**: actor's maze graph (`/actors/{id}/maze`) with node states hidden (dashed, greyed),
    visible (outlined), visited (filled accent); stretch nodes marked. Animate newly unlocked nodes from SSE `maze`.
 7. **Fingerprints**: kind / value / sessions.
+8. **Profile summary (four parts)** at the top, as four cards: **Source** (IPs, ports, firewall hits, real systems
+   touched — red "Touched production" badge when true), **Tools** (tool tags with evidence tooltip), **Behaviour**
+   (kill-chain progress bar recon → access → post-access → lateral, class badge, interests, speed), **Timeline** link.
+9. **Risk breakdown**: stacked bar of `contributions` per stage + bias, the override reason if any, weights version.
+   Text: "Risk 88 = recon +4 · access +18 · post-access +31 · lateral +35 (override: honeytoken used)".
+10. Timeline items with `origin = "production"` get a distinct style and label ("Firewall", "Real SSH auth", "App login").
 
 ### `/incidents` and `/incidents/[id]`
 - List: severity, title, actor, status, opened, updated. Filter by status/severity.
@@ -69,6 +75,8 @@ last seen. Sort by risk / last seen. Live updates from `actor` SSE messages.
   findings table, IOCs table (copy button, export CSV), recommended actions with buttons
   (`block_ip`, `kill_session`, `rotate_token`) behind a confirm dialog stating "lab environment only";
   action history; "Download report (.md)".
+- **Feedback**: two buttons "Confirmed attacker" / "False positive" (+ checkbox "allowlist this source").
+  After the call, show old risk → new risk and the new weights version in a toast.
 
 ### `/maze`
 Global maze definition graph (`/maze`), legend (entry / lure / service / stretch), and a selector to overlay one
@@ -77,6 +85,10 @@ actor's state.
 ### `/honeytokens`
 Table: token id, kind, planted at, sensitivity, seen hits, used hits, last hit, burned. Row → list of hits with
 actor links.
+
+### `/scorer`
+Current single-neuron weights per stage and bias (bar chart), version history (who/which feedback changed it),
+counts of confirmed / false-positive labels, learning on/off badge, "Reset to v1" (admin, confirm dialog).
 
 ### `/sensors`
 Cards: sensor id, service, version, last heartbeat, status (ok / silent). Silent sensors red.

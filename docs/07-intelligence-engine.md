@@ -115,16 +115,73 @@ call the classifier. Agreement → `source: rule+ml`, confidence = max. ML-only 
 Static table loaded from `mitre/techniques.csv` (id, name, tactic id, tactic name) for the ~20 techniques above.
 Never map without a firing rule. Keep ATT&CK version in the CSV header.
 
-## 6. Risk (`intel/risk`)
+## 6. Risk: per-stage scores + single neuron + analyst feedback (`intel/risk`)
 
-`risk = min(100, round(Σ points × (0.5 + 0.5 × confidence)))`.
+Decision (see `decisions.md`): the final risk is a **single neuron (logistic regression)** that combines
+per-stage risk scores, with hard overrides on top and weights improved only by analyst feedback.
+A multi-layer neural network is future scope (`16-future-scope.md`).
 
-| Severity | Condition |
+### 6.1 Per-stage scores (deterministic)
+
+Every finding belongs to one stage (field `stage` in `rules.yaml`). Stage score = sum of that stage's finding
+points × (0.5 + 0.5 × actor confidence), capped at 100.
+
+| Stage | Key | Typical findings |
+| --- | --- | --- |
+| S1 Pre-access / recon | `recon` | port sweep, hidden paths, tool user-agent, robots.txt probing |
+| S2 Access | `access` | password guessing, default credentials, planted credential login, injection attempt |
+| S3 Post-access | `post_access` | discovery, credential file search, honeyfile read/download, persistence, ingress tool transfer |
+| S4 Lateral / impact | `lateral` | k8s access, honeytoken used on another service, decoy credential tried on a real system (§8) |
+
+Stored as `actors.stage_scores = {"recon":20,"access":45,"post_access":60,"lateral":0}`.
+
+### 6.2 Combination (single neuron)
+
+```text
+z     = w1·S1 + w2·S2 + w3·S3 + w4·S4 + b        (S = stage score / 100)
+p     = sigmoid(z)                                (probability the actor is malicious)
+risk  = round(100 · p)
+```
+
+Initial weights (`scorer_weights`, version 1): `w = [1.0, 2.0, 3.0, 4.0]`, `b = -3.0`
+(later stages count more; an actor with only light recon stays low).
+Each finding also keeps its own points so the UI can show a breakdown per stage.
+
+### 6.3 Hard overrides (always win over the neuron)
+
+| Condition | Minimum severity |
+| --- | --- |
+| `token.used` with sensitivity ≥ 4 | critical (risk ≥ 90) |
+| Decoy credential used on a real system (§8) | critical (risk ≥ 95) |
+| Successful real login from an actor IP (§8) | critical (risk 100) |
+| Authenticated k8s decoy access | high (risk ≥ 60) |
+| Actor on the allowlist (`allowlist` table) | logged only, risk 0, no alerts |
+
+### 6.4 Severity
+
+| Severity | Risk |
 | --- | --- |
 | low | 1–24 |
 | medium | 25–49 |
-| high | 50–74, or any k8s decoy access with a token |
-| critical | ≥ 75, or any `token.used` with sensitivity ≥ 4 |
+| high | 50–74 |
+| critical | ≥ 75 |
+
+### 6.5 Analyst feedback and weight updates
+
+- Incident page buttons: **Confirmed attacker** (y = 1) and **False positive** (y = 0). Each click stores a row in
+  `risk_feedback` with the actor's stage scores at that moment.
+- Online logistic-regression update, one step per click (`SCORER_LEARN=true`, default `false` until hour 18):
+
+```text
+p  = sigmoid(w·S + b)
+wi = clamp(wi − η·(p − y)·Si, 0.1, 8.0)       η = 0.05
+b  = clamp(b  − η·(p − y),     −6.0, 0.0)
+```
+
+- Guardrails: weights change only on analyst clicks; every change writes a new `scorer_weights` version with the
+  feedback id; `POST /v1/scorer/reset` restores version 1; overrides are never learned away.
+- A false positive also adds the actor's IPs to the allowlist only if the analyst ticks "allowlist this source".
+- Demo: mark a test actor as false positive → its stage weights drop slightly → a similar replayed session scores lower.
 
 ## 7. Behaviour class (`intel/behaviour`)
 
@@ -153,3 +210,58 @@ Rules (used when ML off or `commands < 5` → `unknown`):
 
 If ML is on and `commands ≥ 5`, call `/ml/v1/classify-session`; use ML class when its top score ≥ 0.6, else rules.
 Recompute at 5, 10, 20, 40 commands.
+
+## 8. External telemetry correlation (`intel/extlink`)
+
+Problem statement requirement: link honeypot activity to other telemetry such as firewall and authentication logs.
+
+### 8.1 Bringing logs in through the same pipeline
+
+`cmd/log-collector` (Go) tails log files, parses each line into a `dsoc.event/v1` envelope and posts it to the
+normal sensor API with its own HMAC key (`SENSOR_ID=logs-01`). For the backend these are just more events, with
+`sensor.service` = `firewall`, `hostauth` or `appauth` and `origin: "production"` (decoys use `origin: "decoy"`).
+
+| Source | Input | Parsed event types |
+| --- | --- | --- |
+| Firewall | nftables/iptables kernel log lines (`IN= OUT= SRC= DST= PROTO= DPT=` with prefix `DSOC-DENY`/`DSOC-ALLOW`) or JSON lines | `fw.deny`, `fw.allow` |
+| Host SSH auth | `/var/log/auth.log` sshd lines (`Failed password for … from … port …`, `Accepted …`) | `auth.real_failed`, `auth.real_success` |
+| Real app login | JSON lines written by the real app (`{"ts","user","src_ip","result","ua"}`) | `auth.app_failed`, `auth.app_success` |
+
+Parsers are table-tested with sample lines in `internal/logparse/testdata/`. Unparseable lines are counted, never
+fatal. External events never create actors on their own (production noise must not flood the SOC); they are
+stored and linked.
+
+### 8.2 Linking external events to decoy actors
+
+Runs when an external event arrives and when an actor is created or gains an IP.
+
+| Link rule | Condition | Effect |
+| --- | --- | --- |
+| `ext_same_ip` | external event src IP ∈ actor IPs, within ±60 min of actor activity | event gets `actor_id`, appears on the actor timeline, tag "seen in firewall/auth logs" |
+| `decoy_cred_on_real` | `auth.real_*`/`auth.app_*` uses a username:password or key captured or planted in a decoy | finding T1078, stage `lateral`, override critical |
+| `real_bruteforce` | ≥ 10 `auth.*_failed` from an actor IP in 10 min | finding T1110 "targeting production", stage `access` |
+| `real_success` | `auth.*_success` from an actor IP | finding "possible real compromise", override critical, recommended action "reset account <user>, review sessions" |
+| `fw_repeat` | ≥ 20 `fw.deny` from an actor IP | finding T1046 "probing production perimeter", stage `recon` |
+
+Response stays lab-only: for real systems the SOC **recommends** actions (reset account, add firewall rule); it
+never executes them.
+
+## 9. Attacker profile (four parts)
+
+| Part | Shown | Source |
+| --- | --- | --- |
+| Source | IPs, first/last seen, decoy ports hit, firewall hits, real systems touched | decoy events + §8 |
+| Tools | e.g. "nmap, Hydra, curl 8.x, OpenSSH 9.6 client, sqlmap" | §9.1 tool rules |
+| Behaviour | kill-chain stage, MITRE techniques, human/script/agent class, interests (db, k8s, cloud), speed (recon → credential use time), stage scores | rules, state machine, §7 |
+| Timeline | one merged list of decoy events, findings, maze unlocks, firewall and real-auth events, colour-coded by origin | events table |
+
+### 9.1 Tool detection (`intel/tools`, `rules/tools.yaml`)
+
+| Signal | Examples → tool tag |
+| --- | --- |
+| HTTP User-Agent | `sqlmap` → sqlmap, `Nikto` → Nikto, `python-requests` → Python script, `curl/` → curl, `Go-http-client` → Go tool, `Nmap Scripting Engine` → nmap NSE |
+| SSH client banner | `libssh` → libssh-based tool, `paramiko` → Python paramiko, `Go` → Go SSH client, `OpenSSH_x` → OpenSSH x |
+| Commands | `nmap`, `masscan`, `hydra`, `wget`, `curl`, `nc`, `python3 -c` |
+| Behaviour | ≥ 3 ports / 60 s → port scanner; ≥ 5 credential pairs / min → brute-forcer |
+
+Tags are stored in `actors.tools` with first-seen time and evidence event id.

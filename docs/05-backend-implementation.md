@@ -13,6 +13,7 @@ cmd/
   decoy-web/main.go
   decoy-k8s/main.go
   decoy-beacon/main.go
+  log-collector/main.go      tails firewall / sshd auth / app-login logs → dsoc.event/v1 (origin: production), 07 §8
   seed/main.go               generates persona + honeytokens + lure files → seed/out/*.json, inserts honeytokens
 internal/
   config/                    env parsing (one struct, defaults, validation)
@@ -33,13 +34,16 @@ internal/
     rules/                   YAML rule loader + evaluator over session/actor features
     features/                rolling per-session and per-actor feature state
     mitre/                   technique id → name/tactic table (static Go map)
-    risk/                    actor risk + severity
+    risk/                    per-stage scores, single-neuron combiner, overrides, feedback weight updates (07 §6)
+    extlink/                 link external (production) events to decoy actors (07 §8)
+    tools/                   tool detection rules (07 §9.1)
     behaviour/               rule classifier + ML hand-off
     honeytoken/              token match + token_hits
     scan/                    port-sweep detector (derived scan.detected)
   maze/                      graph loader, interest scorer, unlock logic, maze-view builder
   alert/                     incidents, notifier interface, discord, slack, templates
   response/                  actions → policy table, audit
+  logparse/                  parsers for nftables/iptables, sshd auth.log, app JSON login logs (+ testdata)
   report/                    incident report (markdown/json)
   api/                       analyst REST, auth (JWT cookie), SSE hub, DTO mapping
   mlclient/                  HTTP client with timeouts + circuit breaker
@@ -92,10 +96,13 @@ correlation and scoring have no races. SSE hub subscribes to every topic.
     **Gate 2:** demo script yields one actor with ≥ 3 linked sessions, ≥ 1 linked by a non-IP signal.
 
 ### M4 — Respond
+11b. `intel/tools`, `logparse` + `cmd/log-collector`, `intel/extlink`; actor profile fields (source, tools, behaviour, timeline).
 12. `alert` (incidents, severity rules, Discord + Slack, cooldown), `response` (actions → policy), `report`.
 13. `mlclient` wired into rules (command + input classifiers) behind `ML_URL`.
     **Gate 3:** full chain end to end on the demo script; Discord message arrives; `block_ip` makes the next
     SSH connection from that IP fail.
+
+12b. Feedback endpoint, `scorer_weights` versions, reset; online update behind `SCORER_LEARN`.
 
 ### M5 — Signature
 14. `maze` adaptive unlocks + bounded loops; `GET /v1/actors/{id}/maze`.
@@ -121,4 +128,7 @@ correlation and scoring have no races. SSE hub subscribes to every topic.
 | `DASHBOARD_URL` | `http://localhost:3000` | core (links in alerts) |
 | `PERSONA_SEED` | random at seed time | seed, decoys |
 | `MAZE_ADAPTIVE` | `true` | core |
+| `SCORER_LEARN` | `false` | core (enable single-neuron updates from feedback) |
+| `SCORER` | `neuron` | core (`mlp` only on the future-scope branch, 16) |
+| `LOG_SOURCES` | `fw:/logs/fw.log,hostauth:/logs/auth.log,appauth:/logs/app-login.jsonl` | log-collector |
 | `LOG_LEVEL` | `info` | all |

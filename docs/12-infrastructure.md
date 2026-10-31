@@ -19,7 +19,7 @@ networks:
   decoy_net: { internal: true }
   mgmt_net: {}
   egress: {}
-volumes: { pgdata: {}, sshdata: {}, quarantine: {}, seed: {} }
+volumes: { pgdata: {}, sshdata: {}, quarantine: {}, seed: {}, prodlogs: {} }
 
 services:
   postgres:
@@ -73,6 +73,18 @@ services:
     ports: ["3000:3000"]
     networks: [mgmt_net]
 
+  log-collector:        # external telemetry (07 §8)
+    build: { context: ./backend/go, target: log-collector }
+    environment: { SENSOR_ID: logs-01, SENSOR_KEY: ${KEY_LOGS}, CORE_URL: http://core:8443 }
+    volumes: [prodlogs:/logs:ro]
+    networks: [decoy_net]
+
+  real-target:          # small "production" host for the demo: nftables firewall logging + sshd + a real login page
+    build: ./infrastructure/docker/real-target
+    volumes: [prodlogs:/logs]   # writes fw.log, auth.log, app-login.jsonl
+    cap_add: [NET_ADMIN]        # nftables inside its own container only
+    networks: [decoy_net]
+
   attacker:             # demo only
     profiles: [demo]
     build: ./infrastructure/docker/attacker
@@ -100,8 +112,9 @@ PG_PASSWORD=change-me
 JWT_SECRET=change-me-32-bytes-min
 SOC_ADMIN_EMAIL=admin@soc.local
 SOC_ADMIN_PASSWORD=change-me
-KEY_SSH=… KEY_WEB=… KEY_K8S=… KEY_BEACON=…
-SENSOR_KEYS=ssh-01:${KEY_SSH},web-01:${KEY_WEB},k8s-01:${KEY_K8S},beacon-01:${KEY_BEACON}
+KEY_SSH=… KEY_WEB=… KEY_K8S=… KEY_BEACON=… KEY_LOGS=…
+SENSOR_KEYS=ssh-01:${KEY_SSH},web-01:${KEY_WEB},k8s-01:${KEY_K8S},beacon-01:${KEY_BEACON},logs-01:${KEY_LOGS}
+SCORER_LEARN=false
 DISCORD_WEBHOOK_URL=
 SLACK_WEBHOOK_URL=
 PERSONA_SEED=

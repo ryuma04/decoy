@@ -95,6 +95,15 @@ Decoys refuse new connections from blocked IPs (TCP close), close killed session
 | PATCH | `/v1/incidents/{incident_id}` | `{"status"?: IncidentStatus, "note"?: string}` | `IncidentDetail` |
 | POST | `/v1/incidents/{incident_id}/actions` | `{"action": "block_ip"\|"unblock_ip"\|"kill_session"\|"rotate_token", "target": string}` | `ResponseAction` (admin role) |
 | GET | `/v1/incidents/{incident_id}/report` | `format=md\|json` | markdown file or JSON |
+| POST | `/v1/incidents/{incident_id}/feedback` | `{"label": "confirmed" \| "false_positive", "allowlist_source"?: boolean, "note"?: string}` | `{"feedback_id", "old_risk", "new_risk", "weights_version"}` |
+| GET | `/v1/scorer` | | `ScorerState` (current weights, bias, version, learning on/off, feedback counts) |
+| POST | `/v1/scorer/reset` | | `ScorerState` (restores version 1; admin) |
+| GET | `/v1/actors/{actor_id}/external` | | list of `Event` with `origin = "production"` linked to the actor |
+| GET | `/v1/allowlist` · POST · DELETE `/v1/allowlist/{cidr}` | `{"cidr","reason"}` | allowlist entries (admin) |
+| GET | `/v1/actors/{actor_id}/tactics` | | list of deception tactics with effect |
+| GET | `/v1/actors/{actor_id}/generated-lures` | | list of generated lures (content, guard and critic results, source) |
+| POST | `/v1/incidents/{incident_id}/recovery` | `{"approve": true}` | recovery plan (`recovery_id`, actions, status) — only after false-positive feedback |
+| GET | `/v1/recovery/{recovery_id}` | | recovery plan status and per-action results |
 | GET | `/v1/honeytokens` | | list of `Honeytoken` with hit counts |
 | GET | `/v1/sensors` | | list of `Sensor` |
 | GET | `/v1/maze` | | `MazeGraph` (definition, no actor state) |
@@ -120,7 +129,9 @@ Optional query `?actor_id=` filters to one actor.
 ```ts
 export type Severity = "low" | "medium" | "high" | "critical";
 export type BehaviourClass = "human_like" | "scripted" | "ai_assisted" | "agent_like" | "unknown";
-export type Service = "ssh" | "web" | "k8s" | "beacon" | "engine";
+export type Service = "ssh" | "web" | "dbadmin" | "k8s" | "beacon" | "engine" | "firewall" | "hostauth" | "appauth";
+export type Origin = "decoy" | "production";
+export type Stage = "recon" | "access" | "post_access" | "lateral";
 export type IncidentStatus = "open" | "ack" | "contained" | "closed";
 
 export interface User { user_id: string; email: string; role: "analyst" | "admin"; }
@@ -134,7 +145,7 @@ export interface Overview {
 }
 
 export interface Event {
-  event_id: string; ts: string; type: string; service: Service; sensor_id: string;
+  event_id: string; ts: string; type: string; origin: Origin; service: Service; sensor_id: string;
   session_id: string; actor_id: string | null; actor_label: string | null;
   src_ip: string; data: Record<string, unknown>; tokens: string[];
   summary: string;                    // server-made one-liner, e.g. "cat ~/.aws/credentials"
@@ -146,6 +157,7 @@ export interface ActorSummary {
   risk_score: number; severity: Severity; confidence: number;
   behaviour_class: BehaviourClass; services: Service[]; session_count: number;
   ips: string[]; top_techniques: string[]; token_hits: number; maze_depth: number;
+  kill_chain_stage: Stage; touched_production: boolean; tools: string[];
 }
 
 export interface LinkReason { signal: string; weight: number; matched_session: string | null; value: string; }
@@ -161,7 +173,7 @@ export interface Fingerprint { kind: string; value: string; session_ids: string[
 export interface Finding {
   finding_id: number; actor_id: string; session_id: string; rule_id: string; title: string;
   tactic: string | null; technique: string | null; technique_name: string | null;
-  points: number; confidence: number; source: "rule" | "ml" | "rule+ml";
+  stage: Stage; points: number; confidence: number; source: "rule" | "ml" | "rule+ml";
   evidence: { event_ids: string[]; matched?: string; ml?: { label: string; confidence: number; top_features: string[] } };
   ts: string;
 }
@@ -173,14 +185,28 @@ export interface BehaviourDetail {
               param_mutation_retries: number; commands: number };
 }
 
+export interface RiskBreakdown {
+  p: number; z: number; weights_version: number;
+  stage_scores: Record<Stage, number>;
+  contributions: Record<Stage, number>;          // w_i * S_i, for the "why this score" bar
+  bias: number; override: string | null;         // e.g. "token_used_sensitivity_5"
+}
+export interface ToolTag { tool: string; first_seen: string; event_id: string; evidence: string; }
+export interface ExternalSummary { firewall_denies: number; real_auth_failed: number; real_auth_success: number; systems: string[]; }
+export interface ScorerState {
+  version: number; weights: Record<Stage, number>; bias: number; learning_rate: number; learning_enabled: boolean;
+  feedback_confirmed: number; feedback_false_positive: number; updated_at: string;
+}
+
 export interface ActorDetail extends ActorSummary {
+  risk_breakdown: RiskBreakdown; tool_tags: ToolTag[]; external: ExternalSummary;
   sessions: Session[]; fingerprints: Fingerprint[]; findings: Finding[];
   behaviour: BehaviourDetail; interest: Record<"cloud" | "k8s" | "db" | "ci", number>;
   incident_id: string | null;
 }
 
 export type TimelineItem =
-  | { kind: "event"; ts: string; event: Event }
+  | { kind: "event"; ts: string; event: Event }          // event.origin = "production" for firewall/auth logs
   | { kind: "finding"; ts: string; finding: Finding }
   | { kind: "maze"; ts: string; node_id: string; state: "visible" | "visited"; reason: string };
 
