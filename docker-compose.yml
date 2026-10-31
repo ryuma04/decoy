@@ -107,3 +107,26 @@ services:
     environment: { SENSOR_ID: beacon-01, SENSOR_KEY: "${KEY_BEACON}", CORE_URL: http://core:8443, LISTEN_ADDR: ":8088" }
     volumes: [seed:/seed:ro]
     ports: ["8088:8088"]
+
+  attacker:
+    build: ./infrastructure/docker/attacker
+    profiles: [demo]
+    networks: [decoy_net]
+    environment:
+      SSH_HOST: decoy-ssh
+      SSH_PORT: "2222"
+      WEB_HOST: decoy-web
+      WEB_PORT: "8080"
+      K8S_HOST: decoy-k8s
+      K8S_PORT: "6443"
+      BEACON_HOST: decoy-beacon
+      BEACON_PORT: "8088"
+    volumes:
+      - seed:/seed:ro
+      - ./scripts:/scripts:ro
+    depends_on:
+      seed: { condition: service_completed_successfully }
+      decoy-ssh: { condition: service_started }
+      decoy-web: { condition: service_started }
+      decoy-k8s: { condition: service_started }
+      decoy-beacon: { condition: service_started }
