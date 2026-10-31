@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/base64"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"strings"
 	"time"
@@ -37,61 +38,92 @@ type IngestResult struct {
 	Duplicates int
 }
 
-// IngestBatch stores valid envelopes in one transaction: session mapping, dedup on event_id, event counts.
+// IngestBatch stores valid envelopes: session mapping, dedup on event_id, event counts.
 // raws[i] is the original JSON of envs[i] (stored as `envelope`).
+//
+// Everything goes to Postgres as ONE pipelined batch (one network round trip). pgx sends a batch with a
+// single Sync, so Postgres runs it as one implicit transaction: all of it commits or none does.
+// Statements run in order, so each event insert sees the session upserted just before it.
 func (s *Store) IngestBatch(ctx context.Context, sensorID string, envs []event.Envelope, raws []json.RawMessage) (IngestResult, error) {
 	var res IngestResult
-	err := s.Tx(ctx, func(tx pgx.Tx) error {
-		res = IngestResult{}
-		service := ""
-		if len(envs) > 0 {
-			service = envs[0].Sensor.Service
+	if len(envs) == 0 {
+		return res, nil
+	}
+	b := &pgx.Batch{}
+	b.Queue(`INSERT INTO sensors (sensor_id, service, last_seen, status) VALUES ($1, $2, now(), 'ok')
+		ON CONFLICT (sensor_id) DO UPDATE SET last_seen = now(), status = 'ok'`, sensorID, envs[0].Sensor.Service)
+
+	firstOf := map[string]int{} // sensor_session_id -> index of its first event in this batch
+	order := []string{}
+	for i := range envs {
+		sid := envs[i].Session.SensorSessionID
+		if _, ok := firstOf[sid]; !ok {
+			firstOf[sid] = i
+			order = append(order, sid)
 		}
-		if _, err := tx.Exec(ctx, `INSERT INTO sensors (sensor_id, service, last_seen, status) VALUES ($1, $2, now(), 'ok')
-			ON CONFLICT (sensor_id) DO UPDATE SET last_seen = now(), status = 'ok'`, sensorID, service); err != nil {
-			return err
+	}
+	for _, sid := range order {
+		e := &envs[firstOf[sid]]
+		b.Queue(`INSERT INTO sessions (sensor_session_id, sensor_id, service, src_ip, started_at)
+			VALUES ($1, $2, $3, $4, $5)
+			ON CONFLICT (sensor_session_id) DO UPDATE SET started_at = LEAST(sessions.started_at, EXCLUDED.started_at)
+			RETURNING session_id, (xmax = 0)`, sid, sensorID, e.Sensor.Service, e.Src.IP, e.TS)
+	}
+	for i := range envs {
+		e := &envs[i]
+		var endedAt *time.Time
+		if e.Type == "conn.close" {
+			endedAt = &e.TS
 		}
-		for i := range envs {
-			e := &envs[i]
-			var sessionID string
-			var inserted bool
-			err := tx.QueryRow(ctx, `INSERT INTO sessions (sensor_session_id, sensor_id, service, src_ip, started_at)
-				VALUES ($1, $2, $3, $4, $5)
-				ON CONFLICT (sensor_session_id) DO UPDATE SET started_at = LEAST(sessions.started_at, EXCLUDED.started_at)
-				RETURNING session_id, (xmax = 0)`,
-				e.Session.SensorSessionID, sensorID, e.Sensor.Service, e.Src.IP, e.TS).Scan(&sessionID, &inserted)
-			if err != nil {
-				return fmt.Errorf("session for %s: %w", e.EventID, err)
-			}
-			var actorID *string
-			tag, err := tx.Exec(ctx, `INSERT INTO events (event_id, session_id, actor_id, ts, type, origin, sensor_id, service, src_ip, data, envelope)
-				SELECT $1, $2, s.actor_id, $3, $4, $5, $6, $7, $8, $9, $10 FROM sessions s WHERE s.session_id = $2
-				ON CONFLICT (event_id) DO NOTHING`,
-				e.EventID, sessionID, e.TS, e.Type, e.Origin, sensorID, e.Sensor.Service, e.Src.IP, []byte(e.Data), []byte(raws[i]))
-			if err != nil {
-				return fmt.Errorf("insert %s: %w", e.EventID, err)
-			}
-			if tag.RowsAffected() == 0 {
-				res.Duplicates++
-				continue
-			}
-			endedAt := (*time.Time)(nil)
-			if e.Type == "conn.close" {
-				endedAt = &e.TS
-			}
-			if err := tx.QueryRow(ctx, `UPDATE sessions SET event_count = event_count + 1, ended_at = COALESCE($2, ended_at)
-				WHERE session_id = $1 RETURNING actor_id`, sessionID, endedAt).Scan(&actorID); err != nil {
-				return err
-			}
-			res.Accepted = append(res.Accepted, StoredEvent{
-				EventID: e.EventID, SessionID: sessionID, ActorID: actorID, TS: e.TS, Type: e.Type, Origin: e.Origin,
-				SensorID: sensorID, Service: e.Sensor.Service, SrcIP: e.Src.IP, Data: e.Data, Envelope: raws[i],
-				Tokens: e.Tokens, NewSession: inserted,
-			})
+		// Insert the event (skipped on duplicate id) and bump its session in the same statement.
+		b.Queue(`WITH s AS (SELECT session_id, actor_id FROM sessions WHERE sensor_session_id = $1),
+			ins AS (INSERT INTO events (event_id, session_id, actor_id, ts, type, origin, sensor_id, service, src_ip, data, envelope)
+				SELECT $2, s.session_id, s.actor_id, $3, $4, $5, $6, $7, $8, $9, $10 FROM s
+				ON CONFLICT (event_id) DO NOTHING RETURNING session_id)
+			UPDATE sessions SET event_count = event_count + 1, ended_at = COALESCE($11, ended_at)
+			FROM ins WHERE sessions.session_id = ins.session_id
+			RETURNING sessions.session_id, sessions.actor_id`,
+			e.Session.SensorSessionID, e.EventID, e.TS, e.Type, e.Origin, sensorID, e.Sensor.Service, e.Src.IP,
+			[]byte(e.Data), []byte(raws[i]), endedAt)
+	}
+
+	br := s.Pool.SendBatch(ctx, b)
+	defer br.Close()
+	if _, err := br.Exec(); err != nil {
+		return res, fmt.Errorf("sensor upsert: %w", err)
+	}
+	newSession := map[string]bool{}
+	for _, sid := range order {
+		var id string
+		var inserted bool
+		if err := br.QueryRow().Scan(&id, &inserted); err != nil {
+			return res, fmt.Errorf("session %s: %w", sid, err)
 		}
-		return nil
-	})
-	return res, err
+		newSession[sid] = inserted
+	}
+	for i := range envs {
+		e := &envs[i]
+		var sessionID string
+		var actorID *string
+		err := br.QueryRow().Scan(&sessionID, &actorID)
+		if errors.Is(err, pgx.ErrNoRows) {
+			res.Duplicates++
+			continue
+		}
+		if err != nil {
+			return res, fmt.Errorf("insert %s: %w", e.EventID, err)
+		}
+		isFirst := firstOf[e.Session.SensorSessionID] == i && newSession[e.Session.SensorSessionID]
+		res.Accepted = append(res.Accepted, StoredEvent{
+			EventID: e.EventID, SessionID: sessionID, ActorID: actorID, TS: e.TS, Type: e.Type, Origin: e.Origin,
+			SensorID: sensorID, Service: e.Sensor.Service, SrcIP: e.Src.IP, Data: e.Data, Envelope: raws[i],
+			Tokens: e.Tokens, NewSession: isFirst,
+		})
+	}
+	if err := br.Close(); err != nil {
+		return IngestResult{}, fmt.Errorf("commit batch: %w", err)
+	}
+	return res, nil
 }
 
 // Heartbeat records a sensor heartbeat.
