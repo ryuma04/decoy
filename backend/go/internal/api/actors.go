@@ -10,6 +10,7 @@ import (
 	"time"
 
 	"github.com/ryuma04/decoy/backend/internal/dto"
+	"github.com/ryuma04/decoy/backend/internal/intel/behaviour"
 	"github.com/ryuma04/decoy/backend/internal/intel/mitre"
 	"github.com/ryuma04/decoy/backend/internal/intel/risk"
 	"github.com/ryuma04/decoy/backend/internal/maze"
@@ -187,11 +188,45 @@ func (s *Server) getActor(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 	// Behaviour features are not computed yet (docs/17 row 5): report "unknown" with zeroed features.
-	d.Behaviour = behaviourDetail{Class: a.BehaviourClass, Scores: map[string]float64{}, Source: "rules", Features: map[string]float64{}}
-	for _, n := range featureNames {
-		d.Behaviour.Features[n] = 0
+	bDetail := behaviourDetail{
+		Class:    a.BehaviourClass,
+		Scores:   map[string]float64{},
+		Source:   "rules",
+		Features: map[string]float64{},
 	}
-	d.Behaviour.Features["services_visited"] = float64(len(sum.Services))
+	if s.Features != nil {
+		feat := s.Features.Actor(a.ActorID)
+		res := behaviour.Classify(feat)
+		bDetail.Class = res.Class
+		bDetail.Scores = res.Scores
+		bDetail.Features = res.Features
+		bDetail.Source = res.Source
+		d.ActorSummary.BehaviourClass = res.Class
+	} else if len(a.BehaviourScore) > 0 {
+		var stored behaviour.Result
+		if err := json.Unmarshal(a.BehaviourScore, &stored); err == nil {
+			if stored.Class != "" {
+				bDetail.Class = stored.Class
+			}
+			if stored.Scores != nil {
+				bDetail.Scores = stored.Scores
+			}
+			if stored.Features != nil {
+				bDetail.Features = stored.Features
+			}
+			if stored.Source != "" {
+				bDetail.Source = stored.Source
+			}
+			d.ActorSummary.BehaviourClass = bDetail.Class
+		}
+	}
+	for _, n := range featureNames {
+		if _, ok := bDetail.Features[n]; !ok {
+			bDetail.Features[n] = 0
+		}
+	}
+	d.Behaviour = bDetail
+
 	if inc, err := s.DB.IncidentOfActor(ctx, a.ActorID); err == nil {
 		d.IncidentID = &inc.IncidentID
 	}

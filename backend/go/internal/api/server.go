@@ -39,6 +39,11 @@ type Server struct {
 	DashboardURL string
 	ScorerLearn  bool
 	MazeGraph    *maze.Graph
+	Features     FeaturesProvider
+}
+
+type FeaturesProvider interface {
+	Actor(actorID string) map[string]float64
 }
 
 // Routes registers every analyst endpoint on mux.

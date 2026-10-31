@@ -22,6 +22,7 @@ import (
 	"github.com/ryuma04/decoy/backend/internal/incident"
 	"github.com/ryuma04/decoy/backend/internal/ingest"
 	"github.com/ryuma04/decoy/backend/internal/intel/engine"
+	"github.com/ryuma04/decoy/backend/internal/intel/features"
 	"github.com/ryuma04/decoy/backend/internal/intel/rules"
 	"github.com/ryuma04/decoy/backend/internal/maze"
 	"github.com/ryuma04/decoy/backend/internal/mlclient"
@@ -123,7 +124,8 @@ func serve(ctx context.Context, cfg config.Core) error {
 		return err
 	}
 	mc := &maze.Controller{Graph: mg, Store: st, Bus: b, Adaptive: cfg.MazeAdaptive}
-	eng := &engine.Engine{Store: st, Bus: b, Rules: rs, ML: ml, Maze: mc}
+	feat := features.New()
+	eng := &engine.Engine{Store: st, Bus: b, Rules: rs, ML: ml, Maze: mc, Features: feat}
 	go eng.Run(ctx)
 	go (&incident.Manager{Store: st, Bus: b}).Run(ctx)
 	narrator := &narrate.Narrator{ML: ml, MaxPerHour: cfg.NarrateMaxHr}
@@ -132,7 +134,7 @@ func serve(ctx context.Context, cfg config.Core) error {
 	sensorMux := http.NewServeMux()
 	(&ingest.Server{Store: st, Bus: b, Keys: cfg.SensorKeys, Maze: mc}).Routes(sensorMux)
 	analystMux := http.NewServeMux()
-	(&api.Server{Store: st, Bus: b, Hub: hub, DB: st, ML: ml, ScorerLearn: cfg.ScorerLearn, Narrator: narrator, DashboardURL: cfg.DashboardURL, MazeGraph: mg,
+	(&api.Server{Store: st, Bus: b, Hub: hub, DB: st, ML: ml, ScorerLearn: cfg.ScorerLearn, Narrator: narrator, DashboardURL: cfg.DashboardURL, MazeGraph: mg, Features: feat,
 		Auth: &api.Auth{Secret: cfg.JWTSecret, TTL: cfg.SessionTTL, Secure: cfg.CookieSecure}}).Routes(analystMux)
 
 	servers := []*http.Server{

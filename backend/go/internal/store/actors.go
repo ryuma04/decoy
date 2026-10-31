@@ -114,6 +114,14 @@ func (s *Store) UpdateActorScore(ctx context.Context, id string, sc ActorScore) 
 	return err
 }
 
+// UpdateActorBehaviour persists behaviour_class and behaviour_score.
+func (s *Store) UpdateActorBehaviour(ctx context.Context, id string, class string, score any) error {
+	b, _ := json.Marshal(score)
+	_, err := s.Pool.Exec(ctx, `UPDATE actors SET behaviour_class = $2, behaviour_score = $3, last_seen = GREATEST(last_seen, now())
+		WHERE actor_id::text = $1`, id, class, b)
+	return err
+}
+
 // TouchActor moves last_seen forward.
 func (s *Store) TouchActor(ctx context.Context, id string, ts time.Time) error {
 	_, err := s.Pool.Exec(ctx, `UPDATE actors SET last_seen = GREATEST(last_seen, $2) WHERE actor_id::text = $1`, id, ts)

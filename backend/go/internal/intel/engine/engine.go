@@ -14,6 +14,7 @@ import (
 
 	"github.com/ryuma04/decoy/backend/internal/bus"
 	"github.com/ryuma04/decoy/backend/internal/dto"
+	"github.com/ryuma04/decoy/backend/internal/intel/behaviour"
 	"github.com/ryuma04/decoy/backend/internal/intel/correlate"
 	"github.com/ryuma04/decoy/backend/internal/intel/inputrisk"
 	"github.com/ryuma04/decoy/backend/internal/intel/mitre"
@@ -134,6 +135,11 @@ func (e *Engine) Process(ctx context.Context, ev store.StoredEvent) error {
 		return nil
 	}
 	_ = e.Store.TouchActor(ctx, actorID, ev.TS)
+	if e.Features != nil && actorID != "" {
+		if assoc, ok := e.Features.(interface{ Associate(sessionID, actorID string) }); ok {
+			assoc.Associate(ev.SessionID, actorID)
+		}
+	}
 
 	// 3. honeytoken hits
 	data := map[string]any{}
@@ -175,6 +181,14 @@ func (e *Engine) Process(ctx context.Context, ev store.StoredEvent) error {
 	if e.Features != nil {
 		matches = append(matches, plain(e.Rules.Evaluate("session", rules.Input{Features: e.Features.Session(ev.SessionID)}))...)
 		matches = append(matches, plain(e.Rules.Evaluate("actor", rules.Input{Features: e.Features.Actor(actorID)}))...)
+		actorFeat := e.Features.Actor(actorID)
+		cmds := int(actorFeat["commands"])
+		if cmds == 5 || cmds == 10 || cmds == 20 || cmds == 40 {
+			res := behaviour.Classify(actorFeat)
+			if err := e.Store.UpdateActorBehaviour(ctx, actorID, res.Class, res); err != nil {
+				slog.Warn("update actor behaviour", "err", err)
+			}
+		}
 	}
 
 	// 4b. adaptive maze (08): interest, visited nodes, maybe one unlock
