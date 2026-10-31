@@ -74,7 +74,7 @@ func NewTacticsManager(dataDir, mlURL, cloneAdminPW string) *TacticsManager {
 		dataDir:      dataDir,
 		mlURL:        mlURL,
 		cloneAdminPW: cloneAdminPW,
-		httpClient:   &http.Client{Timeout: 4 * time.Second},
+		httpClient:   &http.Client{Timeout: 8 * time.Second}, // first request per path only; cached afterwards
 		exportPolls:  make(map[string]int),
 		exportStart:  make(map[string]time.Time),
 		pages:        make(map[string]string),

@@ -256,12 +256,16 @@ def generate_lure_page(path: str, site: str = "Aetees Bakehouse", cfg: Config | 
         f"report dashboard, or admin login panel.\n"
         f"RULES: Output JSON with keys 'title' and 'body_html'.\n"
         f"NEVER include <script> tags, NEVER include external links (href to outside domains), "
-        f"and NEVER include real personal data. Use only mock synthetic data."
+        f"and NEVER include real personal data. Use only mock synthetic data. "
+        f"The business is a small home bakery in Mumbai, India (cakes, cheesecakes, cookies, brownies; online "
+        f"orders and delivery): use Indian names, Mumbai areas and amounts in ₹. "
+        f"Keep it short: body_html under 1500 characters, plain tags only (h2, p, table with at most 6 rows, ul), "
+        f"no style or class attributes."
     )
     if not cfg.enabled:
         return _lure_fallback(path, site)
     try:
-        raw = call_llm(cfg, user=prompt, system="You generate synthetic decoy portal HTML. Output valid JSON.", max_tokens=600)
+        raw = call_llm(cfg, user=prompt, system="You generate synthetic decoy portal HTML. Output valid JSON.", max_tokens=1500)
         raw = re.sub(r"^```(?:json)?\s*|\s*```$", "", raw.strip())
         data = json.loads(raw)
         title, body_html = guard_lure_page(data.get("title", ""), data.get("body_html", ""))
