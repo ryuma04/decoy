@@ -114,3 +114,19 @@ func TestSeverityBands(t *testing.T) {
 		}
 	}
 }
+
+func TestSingleIntrusionSignalIsAtLeastMedium(t *testing.T) {
+	one := StageScores([]Finding{{Stage: "access", Points: 15}}, 1)
+	if b := Score(one, Initial(), Facts{}); b.Risk >= 25 {
+		t.Fatalf("plain single finding should stay low, got %d", b.Risk)
+	}
+	if b := Score(one, Initial(), Facts{ConfirmedExploit: true}); b.Risk < 35 || Severity(b.Risk) != "medium" || *b.Override != "confirmed_exploit_attempt" {
+		t.Fatalf("confirmed exploit: risk %d override %v", b.Risk, b.Override)
+	}
+	if b := Score(StageScores(nil, 1), Initial(), Facts{HoneyfileRead: true}); b.Risk < 40 {
+		t.Fatalf("honeyfile read: risk %d", b.Risk)
+	}
+	if b := Score(one, Initial(), Facts{ConfirmedExploit: true, MaxUsedTokenSensitivity: 5}); b.Risk != 90 {
+		t.Fatalf("token used must still win: %d", b.Risk)
+	}
+}

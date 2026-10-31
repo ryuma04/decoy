@@ -10,6 +10,7 @@ from app.preprocess import is_plain
 LABELS = ["normal", "cmd_injection", "sqli", "xss", "path_traversal"]
 ROOT = os.path.normpath(os.path.join(os.path.dirname(os.path.abspath(__file__)), ".."))
 HARD_SET = os.path.join(ROOT, "data", "hard_set.yaml")
+CUSTOMER_SET = os.path.join(ROOT, "data", "customer_set.yaml")  # shop-customer text, test only (v2)
 
 TARGETS = {
     "attack_recall_at_0.8": 0.95,      # family hold-out
@@ -19,8 +20,8 @@ TARGETS = {
 }
 
 
-def load_hard_set():
-    with open(HARD_SET, encoding="utf-8") as fh:
+def load_hard_set(path=HARD_SET):
+    with open(path, encoding="utf-8") as fh:
         data = yaml.safe_load(fh)
     values, labels = [], []
     for label, items in data.items():

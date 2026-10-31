@@ -31,7 +31,6 @@ nodes:
   - {id: svc_beacon,      kind: service, service: beacon, label: AWS-style beacon}
   - {id: svc_k8s,         kind: service, service: k8s,    label: K8s API}
   - {id: lure_ci_secret,  kind: lure,    theme: ci,       label: ci-jenkins-token secret, default: hidden}
-  - {id: svc_jenkins,     kind: service, service: web,    label: Jenkins decoy, stretch: true}
   - {id: svc_db,          kind: service, service: null,    label: DB decoy,      stretch: true}
 edges:
   - {from: web_entry, to: lure_backup}
@@ -42,7 +41,6 @@ edges:
   - {from: lure_aws, to: svc_beacon}
   - {from: lure_kubeconfig, to: svc_k8s}
   - {from: svc_k8s, to: lure_ci_secret}
-  - {from: lure_ci_secret, to: svc_jenkins}
   - {from: lure_db, to: svc_db}
 interest_signals:          # (regex over command/path/api, theme, points)
   - {match: 'kubectl|\.kube|kubeconfig|6443|k8s|kubernetes', theme: k8s, points: 3}

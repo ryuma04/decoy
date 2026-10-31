@@ -60,7 +60,8 @@ type Visitor struct {
 	CleanReqs      int
 	DivertCount    int
 	Session        *sensorkit.Session
-	AnalystRelease time.Time
+	AnalystRelease time.Time // when this visitor first saw the current analyst release of its IP
+	ReleaseRev     int64     // policy revision of that release (a new click on Release changes it)
 	TacticsEmitted map[string]bool
 
 	// Counters for sliding window metrics

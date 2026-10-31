@@ -11,7 +11,7 @@ def test_health(monkeypatch):
     r = client.get("/health")
     assert r.status_code == 200
     body = r.json()
-    assert body["ok"] is True and body["models"]["input"] == "v1"
+    assert body["ok"] is True and body["models"]["input"] == "v2"
     assert body["narration"] == "off" and body["llm_model"] is None
 
 

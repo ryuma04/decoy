@@ -246,21 +246,26 @@ func (rm *RecoveryManager) CheckAnalystRelease(v *Visitor, kit *sensorkit.Kit) b
 	v.mu.Lock()
 	defer v.mu.Unlock()
 
-	if kit.Released(v.IP) {
-		if v.Diverted {
-			v.Diverted = false
-			v.Severity = SevNone
-			v.Reason = "analyst"
-			v.AnalystRelease = time.Now()
-			if v.Session != nil {
-				v.Session.Event("session.released", "", SessionReleasedData{
-					Reason: "analyst",
-				}, nil, nil)
-				v.Session = nil
-			}
-			return true
+	if !kit.Released(v.IP) {
+		v.AnalystRelease, v.ReleaseRev = time.Time{}, 0
+		return false
+	}
+	// A release applies once, to diversions that existed when the analyst clicked it. A new hard trip afterwards
+	// sticks (docs/18 Task 11). Clicking Release again changes the policy revision and re-arms it.
+	if rev := kit.Policy().Rev; v.AnalystRelease.IsZero() || rev != v.ReleaseRev {
+		v.AnalystRelease, v.ReleaseRev = time.Now(), rev
+	}
+	if v.Diverted && !v.DivertedAt.After(v.AnalystRelease) {
+		v.Diverted = false
+		v.Severity = SevNone
+		v.Reason = "analyst"
+		if v.Session != nil {
+			v.Session.Event("session.released", "", SessionReleasedData{
+				Reason: "analyst",
+			}, nil, nil)
+			v.Session = nil
 		}
-		v.AnalystRelease = time.Now()
+		return true
 	}
 	return false
 }

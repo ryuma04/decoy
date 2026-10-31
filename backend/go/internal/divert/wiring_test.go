@@ -2,7 +2,9 @@ package divert
 
 import (
 	"context"
+	"crypto/tls"
 	"encoding/json"
+	"fmt"
 	"io"
 	"net/http"
 	"net/http/httptest"
@@ -21,11 +23,22 @@ type fakeCore struct {
 	srv    *httptest.Server
 	mu     sync.Mutex
 	events []event.Envelope
+	policy string // JSON served at /v1/sensor/policy
 }
 
 func newFakeCore(t *testing.T) *fakeCore {
 	fc := &fakeCore{}
 	fc.srv = httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.URL.Path == "/v1/sensor/policy" {
+			fc.mu.Lock()
+			p := fc.policy
+			fc.mu.Unlock()
+			if p == "" {
+				p = `{"rev":1}`
+			}
+			_, _ = w.Write([]byte(p))
+			return
+		}
 		if r.URL.Path == "/v1/ingest/events" {
 			var envs []event.Envelope
 			b, _ := io.ReadAll(r.Body)
@@ -213,5 +226,210 @@ func TestNormalShopperSendsNothing(t *testing.T) {
 		if e.Type != "sensor.heartbeat" {
 			t.Errorf("normal shopper produced a %s event", e.Type)
 		}
+	}
+}
+
+// A normal page load pulls many JS/CSS/image files; that must not look like a high request rate.
+func TestPageLoadAssetsDoNotTripRate(t *testing.T) {
+	core := newFakeCore(t)
+	srv, p := newWiredProxy(t, core)
+	client := &http.Client{}
+	resp, _ := browserGet(t, client, srv.URL+"/", nil)
+	cookies := resp.Cookies()
+	for i := 0; i < 60; i++ {
+		browserGet(t, client, fmt.Sprintf("%s/_next/static/chunks/%d.js", srv.URL, i), cookies)
+		browserGet(t, client, fmt.Sprintf("%s/images/cake-%d.webp.png", srv.URL, i), cookies)
+	}
+	resp, body := browserGet(t, client, srv.URL+"/menu", cookies)
+	if body != "real" {
+		t.Fatalf("after a heavy page load got %q, want the real shop", body)
+	}
+	req, _ := http.NewRequest(http.MethodGet, srv.URL+"/menu", nil)
+	req.Header.Set("User-Agent", "Mozilla/5.0 (X11; Linux x86_64) Chrome/131.0")
+	for _, c := range cookies {
+		req.AddCookie(c)
+	}
+	if v, _, _ := p.getVisitor(req); v == nil || v.Diverted || len(v.RequestTimes) > 5 {
+		t.Fatalf("visitor = %+v; assets must not count as requests", v)
+	}
+	_ = resp
+}
+
+// Only real page/API visits count towards auto-release: assets and the shop's timer polls do not.
+func TestCleanRequestsIgnoreAssetsAndPolls(t *testing.T) {
+	core := newFakeCore(t)
+	srv, p := newWiredProxy(t, core)
+	client := &http.Client{}
+	resp, _ := browserGet(t, client, srv.URL+"/.env.bak", nil) // diverted
+	cookies := resp.Cookies()
+	for i := 0; i < 20; i++ {
+		browserGet(t, client, fmt.Sprintf("%s/_next/static/chunks/%d.js", srv.URL, i), cookies)
+		browserGet(t, client, srv.URL+"/api/queue/validate", cookies)
+	}
+	browserGet(t, client, srv.URL+"/menu", cookies)
+	req, _ := http.NewRequest(http.MethodGet, srv.URL+"/menu", nil)
+	req.Header.Set("User-Agent", "Mozilla/5.0 (X11; Linux x86_64) Chrome/131.0")
+	for _, c := range cookies {
+		req.AddCookie(c)
+	}
+	v, _, _ := p.getVisitor(req)
+	if v == nil || v.CleanReqs != 1 {
+		t.Fatalf("CleanReqs = %+v, want 1 (only /menu)", v)
+	}
+}
+
+func TestIPv6LoopbackIsLocalhost(t *testing.T) {
+	if ip, port := parseRemoteAddr("[::1]:51234"); ip != "127.0.0.1" || port != 51234 {
+		t.Fatalf("got %s:%d", ip, port)
+	}
+	if ip, _ := parseRemoteAddr("192.168.1.9:80"); ip != "192.168.1.9" {
+		t.Fatalf("got %s", ip)
+	}
+}
+
+// Lure touches must reach core as events (they feed honeytoken_read and the risk floor), not only return 200.
+func TestLureReadsReachCore(t *testing.T) {
+	core := newFakeCore(t)
+	srv, p := newWiredProxy(t, core)
+	p.cfg.Lures = NewLureManager("HoneyPass-42!", "DbPass-1", "/invoices/view/abc123")
+	client := &http.Client{}
+	resp, body := browserGet(t, client, srv.URL+"/.env.bak", nil)
+	if !strings.Contains(body, "HoneyPass-42!") {
+		t.Fatalf("lure body = %q", body)
+	}
+	cookies := resp.Cookies()
+	browserGet(t, client, srv.URL+"/backup/aetees_db_FINAL.sql.gz", cookies)
+
+	reads := core.waitFor(t, "file.read", 1)
+	if len(reads) == 0 {
+		t.Fatal("no file.read event for /.env.bak reached core")
+	}
+	var d map[string]any
+	_ = json.Unmarshal(reads[0].Data, &d)
+	if d["honeyfile_id"] != "tok_aetees_admin" || d["path"] != "/.env.bak" {
+		t.Errorf("file.read data = %v", d)
+	}
+	if dl := core.waitFor(t, "file.download", 1); len(dl) == 0 {
+		t.Error("no file.download event for the backup dump reached core")
+	}
+}
+
+
+// False success: after 3 failed admin logins the clone receives the clone's credentials as JSON (what Aetees parses).
+func TestFalseSuccessKeepsJSON(t *testing.T) {
+	var got, hosts, xff []string
+	var leaked bool
+	var mu sync.Mutex
+	clone := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		b, _ := io.ReadAll(r.Body)
+		mu.Lock()
+		if r.URL.Path == "/api/admin/login" {
+			got = append(got, string(b))
+			hosts = append(hosts, r.Host)
+			xff = append(xff, r.Header.Get("X-Forwarded-For"))
+		}
+		leaked = leaked || r.Header.Get(falseSuccessHeader) != ""
+		mu.Unlock()
+		w.WriteHeader(http.StatusUnauthorized)
+	}))
+	defer clone.Close()
+	cloneURL, _ := url.Parse(clone.URL)
+	core := newFakeCore(t)
+	srv, p := newWiredProxy(t, core)
+	p.cfg.CloneURL = cloneURL
+	p2, _ := NewProxy(ProxyConfig{RealURL: p.cfg.RealURL, CloneURL: cloneURL, Kit: p.cfg.Kit, Classifier: NewTripwire(),
+		Recovery: NewRecoveryManager(RecoveryConfig{RealURL: p.cfg.RealURL}), Tokens: p.cfg.Tokens,
+		Tactics: NewTacticsManager(t.TempDir(), "", "Clone-Admin-PW")})
+	srv2 := httptest.NewServer(p2)
+	defer srv2.Close()
+	_ = srv
+	client := &http.Client{}
+	resp, _ := browserGet(t, client, srv2.URL+"/.env.bak", nil) // diverted
+	cookies := resp.Cookies()
+	for i := 0; i < 5; i++ {
+		req, _ := http.NewRequest(http.MethodPost, srv2.URL+"/api/admin/login", strings.NewReader(`{"username":"maaz","password":"guess`+fmt.Sprint(i)+`"}`))
+		req.Header.Set("Content-Type", "application/json")
+		req.Header.Set("User-Agent", "Mozilla/5.0 (X11; Linux x86_64) Chrome/131.0")
+		for _, c := range cookies {
+			req.AddCookie(c)
+		}
+		r, err := client.Do(req)
+		if err != nil {
+			t.Fatal(err)
+		}
+		r.Body.Close()
+	}
+	mu.Lock()
+	defer mu.Unlock()
+	last := got[len(got)-1]
+	var body map[string]any
+	if err := json.Unmarshal([]byte(last), &body); err != nil {
+		t.Fatalf("clone got non-JSON login body %q", last)
+	}
+	if body["username"] != "admin" || body["password"] != "Clone-Admin-PW" {
+		t.Fatalf("clone got %v, want the clone's admin credentials", body)
+	}
+	public := strings.TrimPrefix(srv2.URL, "http://")
+	if hosts[len(hosts)-1] != public {
+		t.Errorf("clone saw Host %q, want the public host %q", hosts[len(hosts)-1], public)
+	}
+	if !strings.HasPrefix(xff[len(xff)-1], "10.254.") || !strings.HasPrefix(xff[0], "127.0.0.1") {
+		t.Errorf("X-Forwarded-For = first %q, false-success %q; want the client IP, then a fresh identity", xff[0], xff[len(xff)-1])
+	}
+	if leaked {
+		t.Error("internal false-success marker header reached the clone")
+	}
+}
+
+// An analyst release applies once; a new hard trip afterwards stays diverted (no divert/release loop).
+func TestAnalystReleaseAppliesOnce(t *testing.T) {
+	core := newFakeCore(t)
+	srv, p := newWiredProxy(t, core)
+	client := &http.Client{}
+	resp, _ := browserGet(t, client, srv.URL+"/.env.bak", nil) // hard divert
+	cookies := resp.Cookies()
+
+	core.mu.Lock()
+	core.policy = `{"released_ips":["127.0.0.1"],"rev":2}`
+	core.mu.Unlock()
+	deadline := time.Now().Add(8 * time.Second)
+	for !p.cfg.Kit.Released("127.0.0.1") && time.Now().Before(deadline) {
+		time.Sleep(100 * time.Millisecond)
+	}
+	if _, body := browserGet(t, client, srv.URL+"/menu", cookies); body != "real" {
+		t.Fatalf("after release got %q, want real", body)
+	}
+	time.Sleep(5 * time.Millisecond)
+	browserGet(t, client, srv.URL+"/.git/config", cookies) // new hard trip after the release
+	for i := 0; i < 5; i++ {
+		if _, body := browserGet(t, client, srv.URL+"/menu", cookies); body != "clone" {
+			t.Fatalf("request %d after new hard trip got %q, want clone (release must not re-apply)", i, body)
+		}
+	}
+	if n := len(core.waitFor(t, "session.released", 1)); n != 1 {
+		t.Fatalf("session.released events = %d, want exactly 1", n)
+	}
+}
+
+func TestSecureCookieDroppedOnlyOnPlainHTTP(t *testing.T) {
+	mk := func(tls bool) *http.Response {
+		req := httptest.NewRequest(http.MethodPost, "http://shop/api/admin/login", nil)
+		if !tls {
+			req.TLS = nil
+		}
+		resp := &http.Response{Header: http.Header{}, Request: req}
+		resp.Header.Add("Set-Cookie", "admin_token=abc; Path=/; Max-Age=86400; Secure; HttpOnly; SameSite=lax")
+		return resp
+	}
+	plain := mk(false)
+	insecureCookiesOnHTTP(plain)
+	if c := plain.Header.Get("Set-Cookie"); strings.Contains(strings.ToLower(c), "secure") || !strings.Contains(c, "HttpOnly") {
+		t.Fatalf("plain HTTP cookie = %q, want Secure removed and HttpOnly kept", c)
+	}
+	secure := mk(true)
+	secure.Request.TLS = &tls.ConnectionState{}
+	insecureCookiesOnHTTP(secure)
+	if c := secure.Header.Get("Set-Cookie"); !strings.Contains(c, "Secure") {
+		t.Fatalf("TLS cookie = %q, want unchanged", c)
 	}
 }

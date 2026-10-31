@@ -35,6 +35,7 @@ Still open (not attempted yet; specified in the docs):
 | 10 | Tool detection (`intel/tools`, `rules/tools.yaml`) → `actors.tools` | 07 §9.1 | `dto.ToolTag`, `actors.tools` column |
 | 11 | Stretch: cognitive tactics, LLM lures, false-positive recovery | 08 §Cognitive / §LLM lures, 09 §Recovery | done (Antigravity) |
 | 12 | Divert proxy for the Aetees shop (internal/divert, cmd/divert-proxy) | Tasks 9–12 in 18 | **done** (team, 2026-10-31); wired and verified end to end: sensorkit started (events + policy), ML input-risk in the tripwire, LLM page guard, status + query object in http.request, one session per diverted visitor, etees-01 key in SENSOR_KEYS |
+| 13 | Live bait on aeteesbakehouse.com (Linux laptop, Cloudflare Tunnel): audit, real client IP from CF-Connecting-IP, HTTPS awareness, admin-subdomain honeypot (staff verified by real login), main-site shadow mode, tunnel -> proxy | doc 20 | `internal/divert`, `scripts/dev-up.sh`, cloudflared config |
 
 Known limits found while testing:
 - Each event costs the engine several Postgres round trips; against Neon in eu-west-2 from India that is ~2–4 s

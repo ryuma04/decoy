@@ -26,12 +26,13 @@ import (
 )
 
 const (
-	batchSize     = 50
-	flushEvery    = time.Second
-	queueSize     = 10000
-	heartbeatTick = 30 * time.Second
-	policyTick    = 5 * time.Second
-	spoolMaxBytes = 50 << 20
+	batchSize       = 50
+	flushEvery      = time.Second
+	queueSize       = 10000
+	heartbeatTick   = 30 * time.Second
+	policyTick      = 5 * time.Second
+	mazeViewTimeout = 1500 * time.Millisecond
+	spoolMaxBytes   = 50 << 20
 )
 
 type Options struct {
@@ -201,7 +202,9 @@ func toSet(xs []string) map[string]bool {
 
 // MazeView asks core what this session may see; callers fall back to their default view on error.
 func (k *Kit) MazeView(ctx context.Context, sensorSessionID string, out any) error {
-	ctx, cancel := context.WithTimeout(ctx, 50*time.Millisecond)
+	// Core answers from the database (session -> actor -> maze state -> lure files). 50 ms was too short for a remote
+	// database, so every call timed out and decoys never saw an unlock. Callers cache the answer for 2 s.
+	ctx, cancel := context.WithTimeout(ctx, mazeViewTimeout)
 	defer cancel()
 	return k.get(ctx, "/v1/sensor/maze-view?sensor_session_id="+sensorSessionID, out)
 }

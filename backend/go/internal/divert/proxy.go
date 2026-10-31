@@ -102,26 +102,58 @@ func NewProxy(cfg ProxyConfig) (*Proxy, error) {
 func (p *Proxy) setupProxyDirector(rp *httputil.ReverseProxy, target *url.URL, isClone bool) {
 	origDirector := rp.Director
 	rp.Director = func(req *http.Request) {
+		host := req.Host
 		origDirector(req)
-		req.Host = target.Host
+		req.Host = host // keep the public Host: both copies build identical URLs and never see their internal address
 		if isClone {
 			req.Header.Set("Accept-Encoding", "identity")
 		}
-		if clientIP, _, err := net.SplitHostPort(req.RemoteAddr); err == nil {
-			req.Header.Set("X-Forwarded-For", clientIP)
+		clientIP, _ := parseRemoteAddr(req.RemoteAddr)
+		if isClone && req.Header.Get(falseSuccessHeader) != "" {
+			// false_success: a fresh client identity, so the clone's own login lockout (filled by the attacker's
+			// failed tries) does not block the moment we let them in
+			clientIP = fmt.Sprintf("10.254.%d.%d", time.Now().UnixNano()%250+1, time.Now().UnixNano()/7%250+1)
 		}
+		req.Header.Del(falseSuccessHeader)
+		req.Header.Set("X-Forwarded-For", clientIP)
 	}
 }
 
 func (p *Proxy) setupResponseModifiers() {
 	p.realProxy.ModifyResponse = func(resp *http.Response) error {
 		p.recordResponseStats(resp)
+		insecureCookiesOnHTTP(resp)
 		return nil
 	}
 	p.cloneProxy.ModifyResponse = func(resp *http.Response) error {
 		p.recordResponseStats(resp)
+		insecureCookiesOnHTTP(resp)
 		p.handleCloneResponse(resp)
 		return nil
+	}
+}
+
+// insecureCookiesOnHTTP: the shops run as production builds and mark cookies Secure. When the visitor reached the
+// proxy over plain HTTP (the lab), a browser would drop those cookies and nobody could log in, so the flag is removed
+// for both upstreams alike. Behind TLS (production) cookies pass through unchanged.
+func insecureCookiesOnHTTP(resp *http.Response) {
+	if resp.Request == nil || resp.Request.TLS != nil {
+		return
+	}
+	cs := resp.Header.Values("Set-Cookie")
+	if len(cs) == 0 {
+		return
+	}
+	resp.Header.Del("Set-Cookie")
+	for _, c := range cs {
+		parts := strings.Split(c, ";")
+		kept := parts[:1]
+		for _, a := range parts[1:] {
+			if !strings.EqualFold(strings.TrimSpace(a), "secure") {
+				kept = append(kept, a)
+			}
+		}
+		resp.Header.Add("Set-Cookie", strings.Join(kept, ";"))
 	}
 }
 
@@ -296,9 +328,9 @@ func (p *Proxy) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 			v.CleanReqs = 0
 			v.LastTrip = time.Now()
 			v.mu.Unlock()
-		} else {
+		} else if countsAsPageRequest(r.URL.Path) && !isBackgroundPoll(r.URL.Path) {
 			v.mu.Lock()
-			v.CleanReqs++
+			v.CleanReqs++ // only real page/API visits count towards auto-release, not assets or idle polling
 			v.mu.Unlock()
 		}
 	} else {
@@ -499,8 +531,11 @@ func (p *Proxy) getOrCreateVisitor(r *http.Request, clientIP string) (*Visitor, 
 		p.mu.Lock()
 		defer p.mu.Unlock()
 		if v, ok := p.visitors[cookie.Value]; ok {
-			now := time.Now()
-			v.RequestTimes = append(v.RequestTimes, now)
+			if countsAsPageRequest(r.URL.Path) { // a page load fetches dozens of assets; only pages/API count
+				v.mu.Lock()
+				v.RequestTimes = recentTimes(append(v.RequestTimes, time.Now()), time.Minute)
+				v.mu.Unlock()
+			}
 			return v, cookie.Value, false
 		}
 		v := &Visitor{
@@ -567,6 +602,22 @@ func (p *Proxy) buildVisitorView(v *Visitor) VisitorView {
 	}
 }
 
+// countsAsPageRequest: pages and API calls, not the JS/CSS/image/font files a page load pulls in.
+func countsAsPageRequest(path string) bool { return !isStaticAsset(path) }
+
+// isBackgroundPoll: requests the shop's own pages send on a timer while a tab is open.
+func isBackgroundPoll(path string) bool { return path == "/api/queue/validate" || path == "/api/queue/status" }
+
+// recentTimes keeps only the timestamps inside the window (bounded memory per visitor).
+func recentTimes(ts []time.Time, window time.Duration) []time.Time {
+	cut := time.Now().Add(-window)
+	i := 0
+	for i < len(ts) && ts[i].Before(cut) {
+		i++
+	}
+	return ts[i:]
+}
+
 func isStaticAsset(path string) bool {
 	p := strings.ToLower(path)
 	if strings.HasPrefix(p, "/_next/") {
@@ -584,6 +635,9 @@ func parseRemoteAddr(addr string) (string, int) {
 	host, portStr, err := net.SplitHostPort(addr)
 	if err != nil {
 		return addr, 0
+	}
+	if host == "::1" { // same machine over IPv6: one identity, so dashboard policy for 127.0.0.1 applies
+		host = "127.0.0.1"
 	}
 	port := 0
 	_, _ = fmt.Sscanf(portStr, "%d", &port)

@@ -17,15 +17,15 @@ type Policy struct {
 // Policy reads the active policy rows. Rev changes whenever the set changes (hash of contents).
 func (s *Store) Policy(ctx context.Context) (Policy, error) {
 	p := Policy{BlockedIPs: []string{}, KilledSessions: []string{}, BurnedTokens: []string{}, DivertedIPs: []string{}, ReleasedIPs: []string{}}
-	rows, err := s.Pool.Query(ctx, `SELECT kind, value FROM policy WHERE until IS NULL OR until > now() ORDER BY kind, value`)
+	rows, err := s.Pool.Query(ctx, `SELECT kind, value, COALESCE(until::text, '') FROM policy WHERE until IS NULL OR until > now() ORDER BY kind, value`)
 	if err != nil {
 		return p, err
 	}
 	defer rows.Close()
 	var h uint64 = 14695981039346656037
 	for rows.Next() {
-		var kind, value string
-		if err := rows.Scan(&kind, &value); err != nil {
+		var kind, value, until string
+		if err := rows.Scan(&kind, &value, &until); err != nil {
 			return p, err
 		}
 		switch kind {
@@ -40,7 +40,7 @@ func (s *Store) Policy(ctx context.Context) (Policy, error) {
 		case "released_ip":
 			p.ReleasedIPs = append(p.ReleasedIPs, value)
 		}
-		for _, c := range []byte(kind + "=" + value + ";") {
+		for _, c := range []byte(kind + "=" + value + "@" + until + ";") { // until: a repeated action renews it -> new rev
 			h = (h ^ uint64(c)) * 1099511628211 // FNV-1a
 		}
 	}

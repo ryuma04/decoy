@@ -63,4 +63,5 @@ owner's explicit approval.
 | [17-team-handoff](docs/17-team-handoff.md) | What is built, what is left, who builds it |
 | [18-antigravity-prompts](docs/18-antigravity-prompts.md) | Copy-paste prompts for the remaining tasks |
 | [19-run-and-test](docs/19-run-and-test.md) | Run locally and test every feature by hand |
+| [20-live-bait-deployment](docs/20-live-bait-deployment.md) | Prompt: audit + put the divert proxy in front of aeteesbakehouse.com (Cloudflare Tunnel, shadow mode first) |
 | [decisions](docs/decisions.md) | Running log of design decisions |

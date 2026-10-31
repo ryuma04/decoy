@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"log/slog"
+	"strings"
 	"time"
 
 	"github.com/ryuma04/decoy/backend/internal/bus"
@@ -26,7 +27,16 @@ type Controller struct {
 	Adaptive bool
 }
 
-var entryOf = map[string]string{"web": "web_entry", "ssh": "ssh_entry", "k8s": "svc_k8s", "beacon": "svc_beacon"}
+var entryOf = map[string]string{"web": "web_entry", "ssh": "ssh_entry", "k8s": "svc_k8s", "beacon": "svc_beacon", "db": "svc_db"}
+
+// entryFor picks the maze entry an event belongs to. The Aetees divert proxy also reports service "web", so it is
+// told apart by its sensor id (aetees-01) instead of landing on the admin web decoy's node.
+func entryFor(ev store.StoredEvent) string {
+	if strings.HasPrefix(ev.SensorID, "aetees") {
+		return "aetees_entry"
+	}
+	return entryOf[ev.Service]
+}
 
 // Observe updates interest, marks visited nodes and maybe unlocks one node.
 func (c *Controller) Observe(ctx context.Context, actorID string, ev store.StoredEvent, interest map[string]int) error {
@@ -36,7 +46,7 @@ func (c *Controller) Observe(ctx context.Context, actorID string, ev store.Store
 	d := map[string]any{}
 	_ = json.Unmarshal(ev.Data, &d)
 	text := ""
-	for _, k := range []string{"raw", "path", "value", "resource"} {
+	for _, k := range []string{"raw", "path", "value", "resource", "query"} { // query: DB decoy statements
 		if s, ok := d[k].(string); ok {
 			text += " " + s
 		}
@@ -71,7 +81,7 @@ func (c *Controller) Observe(ctx context.Context, actorID string, ev store.Store
 		c.Bus.Publish(bus.TopicMaze, Message{ActorID: actorID, NodeID: id, State: "visited", Reason: reason})
 		return nil
 	}
-	if err := visit(entryOf[ev.Service], "connected to "+ev.Service); err != nil {
+	if err := visit(entryFor(ev), "connected to "+ev.Service); err != nil {
 		return err
 	}
 	for _, k := range []string{"honeyfile_id", "token_id"} {

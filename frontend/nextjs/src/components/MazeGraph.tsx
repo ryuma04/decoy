@@ -20,7 +20,7 @@ interface Props {
 
 function MazeCustomNode({ data }: { data: { node: MazeNode } }) {
   const n = data.node;
-  const state = n.state ?? "visible";
+  const state = n.state ?? n.default ?? "visible"; // global definition: the node's starting visibility
 
   let containerStyle = "border-hairline bg-elevated text-ink";
   let statusBadge = null;

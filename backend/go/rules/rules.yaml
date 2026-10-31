@@ -233,3 +233,12 @@
   when: { type: db.query, data_regex: { query: '(?i)^\s*(delete|drop|truncate|update|alter)\b' } }
   technique: T1485
   points: 20
+
+# Divert proxy (Aetees shop): a visitor diverted for probing paths a shop never serves (/.git, /wp-admin, /.env*)
+- id: web_sensitive_path_probe
+  title: Probed for hidden files or admin panels on the shop
+  scope: event
+  stage: recon
+  when: { type: session.diverted, data_regex: { label: '^sensitive_path$' } }
+  technique: T1595.003
+  points: 10

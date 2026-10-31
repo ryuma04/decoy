@@ -21,13 +21,13 @@ from sklearn.linear_model import LogisticRegression
 from sklearn.pipeline import FeatureUnion, Pipeline
 
 from app.preprocess import normalise
-from training.metrics import LABELS, load_hard_set, summarise
+from training.metrics import CUSTOMER_SET, LABELS, load_hard_set, summarise
 
 ROOT = os.path.normpath(os.path.join(os.path.dirname(os.path.abspath(__file__)), ".."))
 DATA = os.path.join(ROOT, "data", "processed", "inputs.csv")
 MODEL = os.path.join(ROOT, "models", "input.joblib")
 METRICS = os.path.join(ROOT, "reports", "input_metrics.json")
-VERSION = "v1"
+VERSION = "v2"
 
 
 def build() -> Pipeline:
@@ -74,17 +74,22 @@ def main():
     joblib.dump({"pipeline": final, "version": VERSION, "labels": list(final.classes_),
                  "trained_rows": len(df), "sklearn": sklearn.__version__}, MODEL)
     final_hard = summarise(final, hv, hl)
+    cv, cl = load_hard_set(CUSTOMER_SET)
+    customer = summarise(pipe, cv, cl)          # hold-out model: customer text it never saw
+    final_customer = summarise(final, cv, cl)
 
     metrics = {"version": VERSION, "trained_rows": len(df), "held_out_families": test_fams,
                "family_holdout": held, "family_holdout_model_only": held_model_only,
                "hard_set_holdout_model": hard, "hard_set_holdout_model_only": hard_model_only,
-               "hard_set_final_model": final_hard}
+               "hard_set_final_model": final_hard, "customer_set_holdout_model": customer,
+               "customer_set_final_model": final_customer}
     os.makedirs(os.path.dirname(METRICS), exist_ok=True)
     with open(METRICS, "w", encoding="utf-8") as fh:
         json.dump(metrics, fh, indent=2)
     for name, m in (("family hold-out", held), ("  (model only)", held_model_only),
                     ("hard set (hold-out model)", hard), ("  (model only)", hard_model_only),
-                    ("hard set (final model)", final_hard)):
+                    ("hard set (final model)", final_hard), ("customer set (hold-out model)", customer),
+                    ("customer set (final model)", final_customer)):
         print(f"{name:28s} recall@0.5={m['attack_recall_at_0.5']:.3f} recall@0.8={m['attack_recall_at_0.8']:.3f} "
               f"precision@0.8={m['attack_precision_at_0.8']:.3f} normal FPR@0.5={m['normal_fpr_at_0.5']:.3f} "
               f"macro F1={m['macro_f1']:.3f}")

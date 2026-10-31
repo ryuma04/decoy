@@ -34,6 +34,8 @@ type Facts struct {
 	DecoyCredOnReal         bool // decoy credential used on a real system
 	RealLoginSuccess        bool // successful real login from an actor IP
 	AuthenticatedK8s        bool // authenticated access to the k8s decoy
+	ConfirmedExploit        bool // injection finding where rules and the input-risk model agree (confidence >= 0.9)
+	HoneyfileRead           bool // read or downloaded a planted honeyfile (nobody legitimate ever opens one)
 	Allowlisted             bool
 }
 
@@ -105,6 +107,14 @@ func Score(stage map[string]float64, w Weights, f Facts) Breakdown {
 	}
 	if f.AuthenticatedK8s {
 		override("authenticated_k8s_access", 60)
+	}
+	// One exploit attempt or one lure touch is already a real intrusion signal: at least medium, even before the
+	// actor moves through more stages (the neuron alone gives ~6 for a single access finding).
+	if f.HoneyfileRead {
+		override("honeyfile_read", 40)
+	}
+	if f.ConfirmedExploit {
+		override("confirmed_exploit_attempt", 35)
 	}
 	return b
 }

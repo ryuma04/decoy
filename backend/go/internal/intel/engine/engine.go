@@ -420,6 +420,7 @@ func (e *Engine) Rescore(ctx context.Context, actorID string) error {
 	}
 	stages := risk.StageScores(fs, conf)
 	b := risk.Score(stages, w, risk.Facts{MaxUsedTokenSensitivity: maxSens, AuthenticatedK8s: k8sAuth, Allowlisted: allow,
+		ConfirmedExploit: confirmedExploit(findings), HoneyfileRead: hasRule(findings, "honeytoken_read"),
 		DecoyCredOnReal:  a.TouchedProduction && hasRule(findings, "decoy_cred_on_real"),
 		RealLoginSuccess: hasRule(findings, "real_success")})
 	if err := e.Store.UpdateActorScore(ctx, actorID, store.ActorScore{RiskScore: b.Risk, Severity: risk.Severity(b.Risk),
@@ -518,6 +519,19 @@ func plain(ms []rules.Match) []hit {
 		out[i] = hit{m: m}
 	}
 	return out
+}
+
+// confirmedExploit: an injection finding where the rule and the input-risk model agree with high confidence.
+func confirmedExploit(fs []store.FindingRow) bool {
+	for _, f := range fs {
+		switch f.RuleID {
+		case "cmd_injection", "sqli_attempt", "xss_attempt", "path_traversal_attempt":
+			if f.Confidence >= 0.9 {
+				return true
+			}
+		}
+	}
+	return false
 }
 
 func hasRule(fs []store.FindingRow, id string) bool {

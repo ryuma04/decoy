@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"compress/gzip"
 	"fmt"
+	"github.com/ryuma04/decoy/backend/internal/sensorkit"
 	"net/http"
 	"strings"
 	"sync"
@@ -102,7 +103,7 @@ func (lm *LureManager) HandleLures(w http.ResponseWriter, r *http.Request, v *Vi
 	return false
 }
 
-func (lm *LureManager) serveEnvBak(w http.ResponseWriter, sess any) {
+func (lm *LureManager) serveEnvBak(w http.ResponseWriter, sess *sensorkit.Session) {
 	content := fmt.Sprintf(`# Aetees Production Environment Backup
 NODE_ENV=production
 PORT=3100
@@ -114,13 +115,11 @@ PAYMENT_GATEWAY_KEY="rzp_live_8f0a1c2d3e4b"
 `, lm.dbToken, lm.adminToken)
 
 	dataBytes := []byte(content)
-	if s, ok := sess.(interface {
-		Event(typ, node string, d any, timing any, tokens []string)
-	}); ok && s != nil {
-		s.Event("file.read", "lure_aetees_env", map[string]any{
-			"path":          "/.env.bak",
-			"honeyfile_id":  "tok_aetees_admin",
-			"bytes":         len(dataBytes),
+	if sess != nil { // report the lure touch to core (sensorkit session of the diverted visitor)
+		sess.Event("file.read", "lure_aetees_env", map[string]any{
+			"path":         "/.env.bak",
+			"honeyfile_id": "tok_aetees_admin",
+			"bytes":        len(dataBytes),
 		}, nil, []string{"tok_aetees_admin"})
 	}
 
@@ -129,7 +128,7 @@ PAYMENT_GATEWAY_KEY="rzp_live_8f0a1c2d3e4b"
 	_, _ = w.Write(dataBytes)
 }
 
-func (lm *LureManager) serveBackupDir(w http.ResponseWriter, sess any) {
+func (lm *LureManager) serveBackupDir(w http.ResponseWriter, sess *sensorkit.Session) {
 	html := `<!DOCTYPE HTML>
 <html>
 <head><title>Index of /backup</title></head>
@@ -142,10 +141,8 @@ func (lm *LureManager) serveBackupDir(w http.ResponseWriter, sess any) {
 </pre><hr>
 </body></html>`
 
-	if s, ok := sess.(interface {
-		Event(typ, node string, d any, timing any, tokens []string)
-	}); ok && s != nil {
-		s.Event("file.read", "lure_aetees_orders", map[string]any{
+	if sess != nil { // report the lure touch to core (sensorkit session of the diverted visitor)
+		sess.Event("file.read", "lure_aetees_orders", map[string]any{
 			"path":  "/backup/",
 			"bytes": len(html),
 		}, nil, nil)
@@ -156,15 +153,13 @@ func (lm *LureManager) serveBackupDir(w http.ResponseWriter, sess any) {
 	_, _ = w.Write([]byte(html))
 }
 
-func (lm *LureManager) serveBackupSQLGz(w http.ResponseWriter, sess any) {
+func (lm *LureManager) serveBackupSQLGz(w http.ResponseWriter, sess *sensorkit.Session) {
 	lm.mu.RLock()
 	gzData := lm.sqlGz
 	lm.mu.RUnlock()
 
-	if s, ok := sess.(interface {
-		Event(typ, node string, d any, timing any, tokens []string)
-	}); ok && s != nil {
-		s.Event("file.download", "lure_aetees_orders", map[string]any{
+	if sess != nil { // report the lure touch to core (sensorkit session of the diverted visitor)
+		sess.Event("file.download", "lure_aetees_orders", map[string]any{
 			"path":         "/backup/aetees_db_FINAL.sql.gz",
 			"honeyfile_id": "tok_aetees_invoice",
 			"bytes":        len(gzData),
@@ -177,7 +172,7 @@ func (lm *LureManager) serveBackupSQLGz(w http.ResponseWriter, sess any) {
 	_, _ = w.Write(gzData)
 }
 
-func (lm *LureManager) serveInvoiceCanary(w http.ResponseWriter, sess any) {
+func (lm *LureManager) serveInvoiceCanary(w http.ResponseWriter, sess *sensorkit.Session) {
 	html := `<!DOCTYPE html>
 <html>
 <head>
@@ -194,10 +189,8 @@ func (lm *LureManager) serveInvoiceCanary(w http.ResponseWriter, sess any) {
 </body>
 </html>`
 
-	if s, ok := sess.(interface {
-		Event(typ, node string, d any, timing any, tokens []string)
-	}); ok && s != nil {
-		s.Event("token.used", "lure_aetees_orders", map[string]any{
+	if sess != nil { // report the lure touch to core (sensorkit session of the diverted visitor)
+		sess.Event("token.used", "lure_aetees_orders", map[string]any{
 			"token_id":   "tok_aetees_invoice",
 			"token_kind": "url",
 			"via":        "url_fetch",

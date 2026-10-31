@@ -118,22 +118,28 @@ func (tm *TacticsManager) CheckFalseSuccess(r *http.Request, body []byte, v *Vis
 		return body, false
 	}
 
-	// Rewrite request body to valid clone admin credentials
-	bodyStr := string(body)
-	vals, err := url.ParseQuery(bodyStr)
-	if err == nil {
+	// Rewrite the body to the clone's admin credentials, in the format the shop's login expects (JSON; form as fallback).
+	var rewritten []byte
+	var creds map[string]any
+	if json.Unmarshal(body, &creds) == nil && creds != nil {
+		creds["username"], creds["password"] = "admin", tm.cloneAdminPW
+		rewritten, _ = json.Marshal(creds)
+	} else if vals, err := url.ParseQuery(string(body)); err == nil {
 		vals.Set("username", "admin")
 		vals.Set("password", tm.cloneAdminPW)
-		rewritten := []byte(vals.Encode())
-
-		tm.emitTacticOnce(v, "false_success", "confirmation", "tok_aetees_admin", map[string]any{
-			"reason": "granted synthetic admin session after 3 failures",
-		})
-		return rewritten, true
+		rewritten = []byte(vals.Encode())
+	} else {
+		return body, false
 	}
-
-	return body, false
+	r.Header.Set(falseSuccessHeader, "1") // proxy: send this one login to the clone with a fresh client identity
+	tm.emitTacticOnce(v, "false_success", "confirmation", "tok_aetees_admin", map[string]any{
+		"reason": "granted synthetic admin session after 3 failures",
+	})
+	return rewritten, true
 }
+
+// falseSuccessHeader marks the rewritten login inside the proxy; it is removed before the request leaves.
+const falseSuccessHeader = "X-Dsoc-False-Success"
 
 // HandleSunkCostExport handles /api/admin/export with a progress meter that stalls near 97%.
 func (tm *TacticsManager) HandleSunkCostExport(w http.ResponseWriter, r *http.Request, v *Visitor) bool {

@@ -31,7 +31,9 @@ fi
 
 echo "[3/5] ML service :8000"
 # Background jobs send ALL their output to log files, so they never hold this script's terminal open.
-(cd ai-service/fastapi && { [ -f models/input.joblib ] || { python -m data.generators.inputs && python -m training.train_input; }; } \
+# Retrain when there is no model, or the generator / training code changed since it was built (models aren't in git).
+(cd ai-service/fastapi && { { [ -f models/input.joblib ] && [ -z "$(find data/generators training -newer models/input.joblib -type f 2>/dev/null)" ]; } \
+    || { python -m data.generators.inputs && python -m training.train_input; }; } \
   && exec nohup python -m uvicorn app.main:app --host 127.0.0.1 --port 8000) > .logs/ml.log 2>&1 < /dev/null &
 wait_for ml http://127.0.0.1:8000/health
 

@@ -30,10 +30,8 @@ import mockTechniques from "@/mocks/techniques.json";
 import mockActors from "@/mocks/actors.json";
 import mockActorDetail from "@/mocks/actor_act0007.json";
 import mockActorTimeline from "@/mocks/actor_act0007_timeline.json";
-import mockActorMaze from "@/mocks/actor_act0007_maze.json";
 import mockIncidents from "@/mocks/incidents.json";
 import mockIncidentDetail from "@/mocks/incident_inc001.json";
-import mockMaze from "@/mocks/maze.json";
 import mockHoneytokens from "@/mocks/honeytokens.json";
 import mockSensors from "@/mocks/sensors.json";
 import mockScorer from "@/mocks/scorer.json";
@@ -151,7 +149,6 @@ export const api = {
     return call<ResponseAction>("/diversions", { method: "POST", body: JSON.stringify({ ip, action }) });
   },
   getActorMaze: async (id: string): Promise<MazeGraph> => {
-    if (USE_MOCKS) return mockActorMaze as unknown as MazeGraph;
     return call<MazeGraph>(`/actors/${encodeURIComponent(id)}/maze`);
   },
 
@@ -224,7 +221,6 @@ export const api = {
 
   // Maze
   getMaze: async (): Promise<MazeGraph> => {
-    if (USE_MOCKS) return mockMaze as unknown as MazeGraph;
     return call<MazeGraph>("/maze");
   },
 

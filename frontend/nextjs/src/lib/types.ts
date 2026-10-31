@@ -95,6 +95,7 @@ export type TimelineItem =
 export interface MazeNode {
   id: string; label: string; kind: "entry" | "lure" | "service"; theme: "cloud" | "k8s" | "db" | "ci" | null;
   service: Service | null; stretch: boolean; state?: "hidden" | "visible" | "visited";
+  default?: "hidden" | "visible"; // how the node starts for a new visitor (global maze definition)
 }
 export interface MazeEdge { from: string; to: string; label?: string; }
 export interface MazeGraph { nodes: MazeNode[]; edges: MazeEdge[]; actor_id?: string; }

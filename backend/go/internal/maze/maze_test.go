@@ -7,6 +7,8 @@ import (
 	"slices"
 	"testing"
 	"time"
+
+	"github.com/ryuma04/decoy/backend/internal/store"
 )
 
 func graph(t *testing.T) *Graph {
@@ -122,5 +124,26 @@ func TestOutStates(t *testing.T) {
 	}
 	if g.NodeForToken("tok_kube") != "lure_kubeconfig" {
 		t.Fatal("token -> node")
+	}
+}
+
+func TestEntryForSensorAndService(t *testing.T) {
+	cases := map[string]store.StoredEvent{
+		"aetees_entry": {SensorID: "aetees-01", Service: "web"},
+		"web_entry":    {SensorID: "web-01", Service: "web"},
+		"svc_db":       {SensorID: "db-01", Service: "db"},
+		"ssh_entry":    {SensorID: "ssh-01", Service: "ssh"},
+	}
+	for want, ev := range cases {
+		if got := entryFor(ev); got != want {
+			t.Errorf("%s/%s -> %q, want %q", ev.SensorID, ev.Service, got, want)
+		}
+	}
+}
+
+func TestDBQueryRaisesDBInterest(t *testing.T) {
+	g := graph(t)
+	if got := g.Interest(" select * from customers -- psql", map[string]int{}); got["db"] == 0 {
+		t.Fatalf("db interest = %v", got)
 	}
 }

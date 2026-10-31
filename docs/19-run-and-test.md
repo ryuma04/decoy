@@ -150,6 +150,12 @@ Run the lab and proxy:
    - `breadcrumb`: `curl -b cookies.txt -c cookies.txt http://localhost:8200/` returns clone HTML with injected comment `<!-- DEBUG: Migration in progress. Remove /.env.bak and /backup/ before production release. -->`.
    - `llm_page`: `curl -b cookies.txt -c cookies.txt http://localhost:8200/admin/staff-report` intercepts clone 404, generating an Aetees-themed decoy portal page (#5a3424, #f8ecc2, Oswald/Inter) and caching it to disk under `.data/lure_pages/`.
 
+### Divert proxy — automatic check
+`IP=192.168.56.1 scripts/divert-check.sh` (any address of this machine except 127.0.0.1) sends 12 harmless shop
+requests (contact messages with `--`, `;`, quotes, `#1234`, emoji, an address, a typo URL) and 8 attacks through the
+proxy, each as a fresh visitor, and checks core for `session.diverted`. Expected: `20 passed, 0 failed` (input-risk
+model v2; v1 failed 2 harmless messages).
+
 ## If something looks wrong
 - Nothing on the dashboard: check `.logs/core.log` and the decoy log in `.logs/`; `scripts/dev-down.sh` then
   `scripts/dev-up.sh`.

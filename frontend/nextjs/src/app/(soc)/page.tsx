@@ -1,7 +1,7 @@
 "use client";
 
 import Link from "next/link";
-import { useEffect, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { api } from "@/lib/api";
 import { useStream } from "@/lib/stream";
 import { ago, istTime } from "@/lib/format";
@@ -41,31 +41,57 @@ export default function OverviewPage() {
   const [paused, setPaused] = useState(false);
   const [selectedEvent, setSelectedEvent] = useState<Event | null>(null);
 
-  useEffect(() => {
-    Promise.all([
+  const [updatedAt, setUpdatedAt] = useState<Date | null>(null);
+
+  // Every number on this page comes from the analyst API (database), never from the browser counting events.
+  const loadStats = useCallback(async () => {
+    const [ov, ts, tech] = await Promise.all([
       api.getOverview("1h").catch(() => null),
-      api.getTimeseries({ window: "1h", step: "1m" }).catch(() => ({ points: [] })),
-      api.getTechniques("24h").catch(() => ({ items: [] })),
-      api.listEvents({ limit: "25" }).catch(() => ({ items: [], next_cursor: null })),
-    ]).then(([ov, ts, tech, evs]) => {
-      if (ov) setOverview(ov);
-      if (ts?.points) setTimeseries(ts.points);
-      if (tech?.items) setTechniques(tech.items);
-      if (evs?.items) setLiveFeed(evs.items);
-    });
+      api.getTimeseries({ window: "1h", step: "1m" }).catch(() => null),
+      api.getTechniques("24h").catch(() => null),
+    ]);
+    if (ov) setOverview(ov);
+    if (ts?.points) setTimeseries(fillMinutes(ts.points, 60));
+    if (tech?.items) setTechniques(tech.items);
+    if (ov || ts || tech) setUpdatedAt(new Date());
   }, []);
 
-  // Live SSE stream handler
+  // Live updates: any new event / finding / actor / incident / sensor change re-reads the stats, at most every 3 s.
+  const pending = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const lastLoad = useRef(0);
+  const scheduleRefresh = useCallback(() => {
+    if (pending.current) return;
+    const wait = Math.max(0, 3000 - (Date.now() - lastLoad.current));
+    pending.current = setTimeout(() => {
+      pending.current = null;
+      lastLoad.current = Date.now();
+      void loadStats();
+    }, wait);
+  }, [loadStats]);
+
+  useEffect(() => {
+    lastLoad.current = Date.now();
+    void loadStats();
+    api.listEvents({ limit: "25" })
+      .then((evs) => setLiveFeed(evs.items))
+      .catch(() => undefined);
+    const tick = setInterval(scheduleRefresh, 15000); // rolls the 1-hour window forward even when it is quiet
+    return () => {
+      clearInterval(tick);
+      if (pending.current) clearTimeout(pending.current);
+    };
+  }, [loadStats, scheduleRefresh]);
+
   useStream<Event>("event", (newEvent) => {
     if (!paused) {
       setLiveFeed((prev) => [newEvent, ...prev.slice(0, 49)]);
     }
-    // Increment overview stats dynamically
-    setOverview((prev) => {
-      if (!prev) return null;
-      return { ...prev, events: prev.events + 1 };
-    });
+    scheduleRefresh();
   });
+  useStream<unknown>("finding", scheduleRefresh);
+  useStream<unknown>("actor", scheduleRefresh);
+  useStream<unknown>("incident", scheduleRefresh);
+  useStream<unknown>("sensor", scheduleRefresh);
 
   const topActor = overview?.top_actor;
 
@@ -77,6 +103,9 @@ export default function OverviewPage() {
           <h1 className="text-[28px] font-semibold tracking-tight text-ink">SOC Overview</h1>
           <p className="mt-1 text-body text-[13px]">
             Deception telemetry, correlated threat actors, and decoy sensor health across the lab.
+          </p>
+          <p className="mt-1 font-mono text-[11px] text-mute">
+            {updatedAt ? `Live from the database · updated ${istTime(updatedAt.toISOString())}` : "Loading live data…"}
           </p>
         </div>
         <div className="flex items-center gap-2">
@@ -118,7 +147,8 @@ export default function OverviewPage() {
         <KpiCard
           title="Sensor Fleet"
           value={`${overview?.sensors_ok ?? 0} / ${overview?.sensors_total ?? 0}`}
-          subtitle="All decoys operational"
+          subtitle={sensorSubtitle(overview?.sensors_ok, overview?.sensors_total)}
+          alert={overview != null && overview.sensors_ok < overview.sensors_total}
           icon={<Server className="h-4 w-4" />}
         />
       </div>
@@ -340,4 +370,24 @@ export default function OverviewPage() {
       <EventDrawer event={selectedEvent} onClose={() => setSelectedEvent(null)} />
     </div>
   );
+}
+
+// fillMinutes returns one point per minute for the last n minutes, 0 where nothing happened (the API only returns
+// minutes that had events, which would hide quiet periods on the chart).
+function fillMinutes(points: TimeseriesPoint[], n: number): TimeseriesPoint[] {
+  const byMinute = new Map<number, number>();
+  for (const p of points) byMinute.set(Math.floor(new Date(p.t).getTime() / 60000), p.v);
+  const now = Math.floor(Date.now() / 60000);
+  const out: TimeseriesPoint[] = [];
+  for (let m = now - n + 1; m <= now; m++) {
+    out.push({ t: new Date(m * 60000).toISOString(), v: byMinute.get(m) ?? 0 });
+  }
+  return out;
+}
+
+function sensorSubtitle(ok?: number, total?: number): string {
+  if (ok == null || total == null) return "Checking sensors…";
+  if (total === 0) return "No sensors registered";
+  if (ok === total) return "All decoys reporting";
+  return `${total - ok} not reporting (no heartbeat in 90 s)`;
 }

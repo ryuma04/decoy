@@ -109,7 +109,58 @@ def _password(r):
     return pw
 
 
+def _cust(r, *parts):
+    """Join customer-text fragments with the separators real people use (--, ;, ..., &)."""
+    out = ""
+    for i, p in enumerate(x for x in parts if x):
+        out += (r.choice(S["cust_seps"]) if i else "") + p
+    return out.strip() + r.choice(S["cust_tails"])
+
+
+def _order_ref(r):
+    return r.choice([f"order #{r.randint(1000, 99999)}", f"Order #{r.randint(1000, 99999)}", f"order {r.randint(100, 9999)}",
+                     f"#{r.randint(1000, 99999)}", f"order no. {r.randint(1000, 99999)}", f"ref {r.randint(10000, 99999)}"])
+
+
+def _customer_message(r):
+    return _cust(r, r.choice(S["cust_openers"]),
+                 f"need a {r.choice(S['cust_items'])} for {r.choice(S['cust_people'])}'s {r.choice(S['cust_reasons'])}",
+                 r.choice(S["cust_requests"]))
+
+
+def _order_note(r):
+    return _cust(r, r.choice([_order_ref(r), r.choice(S["cust_requests"]).capitalize()]),
+                 r.choice(S["cust_requests"]), r.choice(["", f"it's for {r.choice(S['cust_people'])}",
+                                                          f"{r.choice(S['cust_items'])} or {r.choice(S['cust_items'])}?"]))
+
+
+def _delivery_note(r):
+    return _cust(r, r.choice([f"Flat {r.randint(1, 40)}{r.choice('ABCD')}", f"{r.randint(1, 99)}/{r.randint(1, 20)}, "
+                              f"{r.choice(S['plain_words']).title()} Nagar", "Office reception", "Gate 2", "Tower B"]),
+                 r.choice(S["cust_requests"]), r.choice(["", f"code {r.randint(1000, 9999)}#", "dog is friendly",
+                                                          "lift not working", "near the temple", "opp. petrol pump"]))
+
+
+def _review(r):
+    return _cust(r, f"\"{r.choice(S['cust_feelings']).capitalize()}\"" if r.random() < 0.3 else r.choice(S["cust_feelings"]).capitalize(),
+                 f"the {r.choice(S['cust_items'])} for {r.choice(S['cust_people'])}", r.choice(S["cust_feelings"]))
+
+
+def _enquiry(r):
+    return _cust(r, r.choice(S["cust_openers"]), r.choice([
+        f"is {r.choice(S['cust_items'])} available or should I pick {r.choice(S['cust_items'])}",
+        f"can I change {_order_ref(r)}", f"price > {r.randint(5, 30)}00 is fine",
+        f"budget < ₹{r.randint(5, 30)}00", f"can you write '{r.choice(['Happy', 'Congrats', 'Get well soon'])} "
+        f"{r.choice(S['first_names'])}' on top", f"select the {r.choice(S['cust_items'])}, drop the {r.choice(S['cust_requests'])}",
+        f"{_order_ref(r)} or {_order_ref(r)}, not sure which"]), r.choice(["", r.choice(S["cust_requests"])]))
+
+
 NORMAL = {
+    "customer_message": _customer_message,
+    "order_note": _order_note,
+    "delivery_note": _delivery_note,
+    "review": _review,
+    "enquiry": _enquiry,
     "host": _host,
     "host_port": lambda r: f"{_host(r)}:{r.choice([22, 80, 443, 8080, 3000, 5432])}",
     "ip": _ip,
@@ -226,7 +277,7 @@ def generate(n: int, seed: int):
 
 def main():
     ap = argparse.ArgumentParser()
-    ap.add_argument("--n", type=int, default=7000)
+    ap.add_argument("--n", type=int, default=9000)
     ap.add_argument("--seed", type=int, default=7)
     a = ap.parse_args()
     rows = generate(a.n, a.seed)

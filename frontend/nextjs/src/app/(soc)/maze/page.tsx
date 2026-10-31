@@ -2,7 +2,8 @@
 
 import { useEffect, useState } from "react";
 import { api } from "@/lib/api";
-import type { ActorSummary, MazeGraph as MazeGraphType } from "@/lib/types";
+import { useStream } from "@/lib/stream";
+import type { ActorSummary, MazeGraph as MazeGraphType, MazeMessage } from "@/lib/types";
 import { MazeGraph } from "@/components/MazeGraph";
 import { Compass } from "lucide-react";
 
@@ -24,6 +25,8 @@ export default function GlobalMazePage() {
     });
   }, []);
 
+  const [lastChange, setLastChange] = useState<MazeMessage | null>(null);
+
   useEffect(() => {
     if (!selectedActorId) {
       setActorMaze(null);
@@ -31,6 +34,15 @@ export default function GlobalMazePage() {
     }
     api.getActorMaze(selectedActorId).then(setActorMaze).catch(() => undefined);
   }, [selectedActorId]);
+
+  // Live: the engine publishes every visit / unlock; refresh the overlay and the actor list (depth) when it happens.
+  useStream<MazeMessage>("maze", (m) => {
+    setLastChange(m);
+    if (m.actor_id === selectedActorId) {
+      api.getActorMaze(selectedActorId).then(setActorMaze).catch(() => undefined);
+    }
+    api.listActors().then((a) => setActors(a.items)).catch(() => undefined);
+  });
 
   const activeGraph = actorMaze ?? globalMaze;
 
@@ -44,6 +56,12 @@ export default function GlobalMazePage() {
           <p className="mt-1 text-body text-[13px]">
             Decoy topology, dynamic lures, and actor traversal tracking with strict bounded limits.
           </p>
+          {lastChange && (
+            <p className="mt-1 font-mono text-[11px] text-mute">
+              Last change: {actors.find((a) => a.actor_id === lastChange.actor_id)?.label ?? lastChange.actor_id.slice(0, 8)} ·{" "}
+              {lastChange.node_id} → {lastChange.state} ({lastChange.reason})
+            </p>
+          )}
         </div>
 
         {/* Actor Overlay Selector */}

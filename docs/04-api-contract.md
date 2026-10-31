@@ -40,7 +40,7 @@ Response `200`: `{"accepted": 48, "duplicates": 2, "rejected": [{"event_id": "�
 
 ### `GET /v1/sensor/maze-view?sensor_session_id=ssh-01:7f3a9c`
 
-Decoy asks what this session may see. Core answers ≤ 50 ms; on timeout the decoy uses its default view.
+Decoy asks what this session may see. Core aims to answer in ≤ 50 ms next to a local database; decoys wait up to 1.5 s (remote databases are slower) and cache the answer for 2 s; on timeout the decoy uses its default view.
 
 ```json
 {

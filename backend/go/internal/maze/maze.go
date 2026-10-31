@@ -19,7 +19,7 @@ type Node struct {
 	Service *string `yaml:"service" json:"service"`
 	Label   string  `yaml:"label" json:"label"`
 	Token   string  `yaml:"token" json:"-"`
-	Default string  `yaml:"default" json:"-"` // visible | hidden ("" = visible for entries/services)
+	Default string  `yaml:"default" json:"default,omitempty"` // visible | hidden ("" = visible for entries/services)
 	Stretch bool    `yaml:"stretch" json:"stretch"`
 }
 
