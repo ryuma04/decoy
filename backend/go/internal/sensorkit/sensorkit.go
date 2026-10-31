@@ -173,6 +173,8 @@ func (k *Kit) Burned(tokenID string) bool   { return k.Policy().burned[tokenID] 
 func (k *Kit) Diverted(ip string) bool      { return k.Policy().diverted[ip] }
 func (k *Kit) Released(ip string) bool      { return k.Policy().released[ip] }
 
+func (k *Kit) PollPolicy(ctx context.Context) { k.pollPolicy(ctx) }
+
 func (k *Kit) pollPolicy(ctx context.Context) {
 	var p Policy
 	if err := k.get(ctx, "/v1/sensor/policy", &p); err != nil {
