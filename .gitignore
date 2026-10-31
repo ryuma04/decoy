@@ -31,3 +31,8 @@ ai-service/fastapi/data/processed/
 ai-service/fastapi/models/*.joblib
 __pycache__/
 .pytest_cache/
+
+# local run
+.logs/
+.data/
+*.exe

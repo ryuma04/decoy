@@ -7,7 +7,7 @@ can write them directly. Keep this list current: tick items when done, add new o
 | # | Part | Spec | Plugs into (already built and tested) | Owner |
 | --- | --- | --- | --- | --- |
 | 1 | SSH decoy network server (`internal/decoy/ssh/server.go`, `cmd/decoy-ssh`): `x/crypto/ssh` server, password + public-key callbacks emitting `auth.attempt`, PTY/shell/exec channels, idle 10 min / cap 30 min / 500 commands, policy checks | 06 §1, 08 limits | `sensorkit` (sessions, events, policy), `decoy/ssh` `LineEditor`, `Shell`, `BaseTree`, `persona` | done (Antigravity) |
-| 2 | Web decoy (`internal/decoy/web`, `cmd/decoy-web`) | 06 §2 | `sensorkit`, persona | |
+| 2 | Web decoy (`internal/decoy/web`, `cmd/decoy-web`) | 06 §2 | `sensorkit`, persona | done (Antigravity) |
 | 3 | Kubernetes API decoy (`internal/decoy/k8s`, `cmd/decoy-k8s`) | 06 §3 | `sensorkit`, persona | |
 | 4 | Beacon (`internal/decoy/beacon`, `cmd/decoy-beacon`) | 06 §4 | `sensorkit` | done (Antigravity) |
 | 5 | Per-session / per-actor features and behaviour class (`internal/intel/features`, `internal/intel/behaviour`) | 07 §3, §7 | rule engine reads `Features map[string]float64` (`internal/intel/rules`); `BehaviourDetail` type in 04 | done (Antigravity) |
