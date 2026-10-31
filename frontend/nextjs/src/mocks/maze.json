@@ -1,0 +1,21 @@
+{
+  "nodes": [
+    {"id": "entry_web", "label": "Web Admin (robots.txt)", "kind": "entry", "theme": "ci", "service": "web", "stretch": false},
+    {"id": "lure_backup", "label": "Backup Archive (.zip)", "kind": "lure", "theme": "ci", "service": "web", "stretch": false},
+    {"id": "ssh_entry", "label": "SSH Staging Host", "kind": "service", "theme": "ci", "service": "ssh", "stretch": false},
+    {"id": "lure_kubeconfig", "label": "Kubeconfig File", "kind": "lure", "theme": "k8s", "service": "ssh", "stretch": false},
+    {"id": "k8s_api", "label": "Kubernetes API Decoy", "kind": "service", "theme": "k8s", "service": "k8s", "stretch": false},
+    {"id": "lure_aws_creds", "label": "AWS Credentials (~/.aws)", "kind": "lure", "theme": "cloud", "service": "ssh", "stretch": false},
+    {"id": "beacon_aws", "label": "AWS STS Beacon Decoy", "kind": "service", "theme": "cloud", "service": "beacon", "stretch": false},
+    {"id": "stretch_db", "label": "Postgres Read Replica", "kind": "service", "theme": "db", "service": "dbadmin", "stretch": true}
+  ],
+  "edges": [
+    {"from": "entry_web", "to": "lure_backup", "label": "robots.txt link"},
+    {"from": "lure_backup", "to": "ssh_entry", "label": "deploy_rsa key"},
+    {"from": "ssh_entry", "to": "lure_kubeconfig", "label": "kubeconfig file"},
+    {"from": "lure_kubeconfig", "to": "k8s_api", "label": "bearer token"},
+    {"from": "ssh_entry", "to": "lure_aws_creds", "label": "AWS credentials"},
+    {"from": "lure_aws_creds", "to": "beacon_aws", "label": "SigV4 API request"},
+    {"from": "k8s_api", "to": "stretch_db", "label": "database credentials"}
+  ]
+}

@@ -1,0 +1,36 @@
+{
+  "window": "1h",
+  "events": 284,
+  "active_actors": 3,
+  "new_actors": 1,
+  "open_incidents": {
+    "critical": 1,
+    "high": 1,
+    "medium": 1,
+    "low": 0
+  },
+  "token_hits": 2,
+  "sensors_ok": 4,
+  "sensors_total": 4,
+  "top_actor": {
+    "actor_id": "8b0c2c1e-7f3a-4e2b-9d1a-4c8e7b2a9012",
+    "label": "ACT-0007",
+    "first_seen": "2026-10-31T09:42:15Z",
+    "last_seen": "2026-10-31T10:05:52Z",
+    "risk_score": 88,
+    "severity": "critical",
+    "confidence": 0.93,
+    "behaviour_class": "agent_like",
+    "services": ["web", "ssh", "k8s", "beacon"],
+    "session_count": 4,
+    "ips": ["10.66.0.23", "10.66.0.41"],
+    "top_techniques": ["T1190", "T1078", "T1613", "T1552.001"],
+    "token_hits": 2,
+    "maze_depth": 4,
+    "kill_chain_stage": "lateral",
+    "touched_production": true,
+    "tools": ["nmap", "sqlmap", "curl"]
+  },
+  "ml_input": true,
+  "narration": "llm"
+}

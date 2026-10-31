@@ -1,0 +1,206 @@
+[
+  {
+    "kind": "event",
+    "ts": "2026-10-31T09:42:15Z",
+    "event": {
+      "event_id": "ev-001",
+      "ts": "2026-10-31T09:42:15Z",
+      "type": "net.syn",
+      "origin": "decoy",
+      "service": "web",
+      "sensor_id": "web-01",
+      "session_id": "sess-web-01",
+      "actor_id": "8b0c2c1e-7f3a-4e2b-9d1a-4c8e7b2a9012",
+      "actor_label": "ACT-0007",
+      "src_ip": "10.66.0.23",
+      "data": {"dst_port": 80, "flags": "SYN"},
+      "tokens": [],
+      "summary": "Port sweep syn probe on port 80"
+    }
+  },
+  {
+    "kind": "event",
+    "ts": "2026-10-31T09:43:10Z",
+    "event": {
+      "event_id": "ev-002",
+      "ts": "2026-10-31T09:43:10Z",
+      "type": "http.get",
+      "origin": "decoy",
+      "service": "web",
+      "sensor_id": "web-01",
+      "session_id": "sess-web-01",
+      "actor_id": "8b0c2c1e-7f3a-4e2b-9d1a-4c8e7b2a9012",
+      "actor_label": "ACT-0007",
+      "src_ip": "10.66.0.23",
+      "data": {"path": "/robots.txt", "status": 200},
+      "tokens": [],
+      "summary": "GET /robots.txt (200 OK)"
+    }
+  },
+  {
+    "kind": "event",
+    "ts": "2026-10-31T09:43:40Z",
+    "event": {
+      "event_id": "ev-003",
+      "ts": "2026-10-31T09:43:40Z",
+      "type": "file.read",
+      "origin": "decoy",
+      "service": "web",
+      "sensor_id": "web-01",
+      "session_id": "sess-web-01",
+      "actor_id": "8b0c2c1e-7f3a-4e2b-9d1a-4c8e7b2a9012",
+      "actor_label": "ACT-0007",
+      "src_ip": "10.66.0.23",
+      "data": {"path": "/admin/backup/internal-backup.zip", "size": 14200},
+      "tokens": ["tok_backup_zip"],
+      "summary": "Downloaded honeyfile internal-backup.zip"
+    }
+  },
+  {
+    "kind": "finding",
+    "ts": "2026-10-31T09:44:32Z",
+    "finding": {
+      "finding_id": 1,
+      "actor_id": "8b0c2c1e-7f3a-4e2b-9d1a-4c8e7b2a9012",
+      "session_id": "sess-web-01",
+      "rule_id": "rule_cmd_injection",
+      "title": "Command Injection in Diagnostic Endpoint",
+      "tactic": "Initial Access",
+      "technique": "T1190",
+      "technique_name": "Exploit Public-Facing Application",
+      "stage": "access",
+      "points": 25,
+      "confidence": 0.98,
+      "source": "rule+ml",
+      "evidence": {
+        "event_ids": ["ev-004"],
+        "matched": "; cat /etc/passwd",
+        "ml": {
+          "label": "cmd_injection",
+          "risk": 0.97,
+          "confidence": 0.95,
+          "top_features": ["; cat", "/etc/passwd"],
+          "was_encoded": false
+        }
+      },
+      "ts": "2026-10-31T09:44:32Z"
+    }
+  },
+  {
+    "kind": "maze",
+    "ts": "2026-10-31T09:48:50Z",
+    "node_id": "ssh_entry",
+    "state": "visible",
+    "reason": "Backup archive contained deploy_rsa key pointing to ssh-01"
+  },
+  {
+    "kind": "event",
+    "ts": "2026-10-31T09:49:15Z",
+    "event": {
+      "event_id": "ev-007",
+      "ts": "2026-10-31T09:49:15Z",
+      "type": "auth.success",
+      "origin": "decoy",
+      "service": "ssh",
+      "sensor_id": "ssh-01",
+      "session_id": "sess-ssh-01",
+      "actor_id": "8b0c2c1e-7f3a-4e2b-9d1a-4c8e7b2a9012",
+      "actor_label": "ACT-0007",
+      "src_ip": "10.66.0.41",
+      "data": {"user": "deploy", "auth_method": "publickey", "key_fp": "SHA256:d8c1e7a2b9f0..."},
+      "tokens": ["tok_backup_zip"],
+      "summary": "SSH login as deploy via stolen deploy key"
+    }
+  },
+  {
+    "kind": "finding",
+    "ts": "2026-10-31T09:51:20Z",
+    "finding": {
+      "finding_id": 2,
+      "actor_id": "8b0c2c1e-7f3a-4e2b-9d1a-4c8e7b2a9012",
+      "session_id": "sess-ssh-01",
+      "rule_id": "rule_cloud_cred_search",
+      "title": "Cloud Credentials Exfiltration",
+      "tactic": "Credential Access",
+      "technique": "T1552.001",
+      "technique_name": "Credentials in Files",
+      "stage": "post_access",
+      "points": 35,
+      "confidence": 1.0,
+      "source": "rule",
+      "evidence": {
+        "event_ids": ["ev-008", "ev-009"],
+        "matched": "cat ~/.aws/credentials"
+      },
+      "ts": "2026-10-31T09:51:20Z"
+    }
+  },
+  {
+    "kind": "maze",
+    "ts": "2026-10-31T09:53:00Z",
+    "node_id": "k8s_api",
+    "state": "visible",
+    "reason": "Actor searched for *.kube* configs in /opt/deploy"
+  },
+  {
+    "kind": "event",
+    "ts": "2026-10-31T09:57:00Z",
+    "event": {
+      "event_id": "ev-015",
+      "ts": "2026-10-31T09:57:00Z",
+      "type": "k8s.api_request",
+      "origin": "decoy",
+      "service": "k8s",
+      "sensor_id": "k8s-01",
+      "session_id": "sess-k8s-01",
+      "actor_id": "8b0c2c1e-7f3a-4e2b-9d1a-4c8e7b2a9012",
+      "actor_label": "ACT-0007",
+      "src_ip": "10.66.0.41",
+      "data": {"verb": "list", "resource": "pods", "namespace": "kube-system"},
+      "tokens": ["tok_kube_cfg"],
+      "summary": "K8s API list pods in namespace kube-system"
+    }
+  },
+  {
+    "kind": "finding",
+    "ts": "2026-10-31T10:02:11Z",
+    "finding": {
+      "finding_id": 3,
+      "actor_id": "8b0c2c1e-7f3a-4e2b-9d1a-4c8e7b2a9012",
+      "session_id": "sess-beacon-01",
+      "rule_id": "rule_token_beacon_hit",
+      "title": "Critical Honeytoken Triggered at Beacon",
+      "tactic": "Lateral Movement",
+      "technique": "T1078",
+      "technique_name": "Valid Accounts",
+      "stage": "lateral",
+      "points": 40,
+      "confidence": 1.0,
+      "source": "rule",
+      "evidence": {
+        "event_ids": ["ev-019"],
+        "matched": "AKIAEXAMPLE99 SigV4 request"
+      },
+      "ts": "2026-10-31T10:02:11Z"
+    }
+  },
+  {
+    "kind": "event",
+    "ts": "2026-10-31T10:04:15Z",
+    "event": {
+      "event_id": "ev-022",
+      "ts": "2026-10-31T10:04:15Z",
+      "type": "auth.failed",
+      "origin": "production",
+      "service": "appauth",
+      "sensor_id": "prod-auth-01",
+      "session_id": "sess-prod-01",
+      "actor_id": "8b0c2c1e-7f3a-4e2b-9d1a-4c8e7b2a9012",
+      "actor_label": "ACT-0007",
+      "src_ip": "10.66.0.41",
+      "data": {"target": "corp-vpn-gw.prod.internal", "user": "deploy"},
+      "tokens": [],
+      "summary": "App login (production) attempted on corp-vpn-gw with stolen deploy credential"
+    }
+  }
+]

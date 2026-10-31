@@ -1,0 +1,30 @@
+[
+  {
+    "sensor_id": "ssh-01",
+    "service": "ssh",
+    "version": "1.0.0",
+    "last_seen": "2026-10-31T10:05:40Z",
+    "status": "ok"
+  },
+  {
+    "sensor_id": "web-01",
+    "service": "web",
+    "version": "1.0.0",
+    "last_seen": "2026-10-31T10:05:35Z",
+    "status": "ok"
+  },
+  {
+    "sensor_id": "k8s-01",
+    "service": "k8s",
+    "version": "1.0.0",
+    "last_seen": "2026-10-31T10:05:45Z",
+    "status": "ok"
+  },
+  {
+    "sensor_id": "beacon-01",
+    "service": "beacon",
+    "version": "1.0.0",
+    "last_seen": "2026-10-31T10:05:50Z",
+    "status": "ok"
+  }
+]

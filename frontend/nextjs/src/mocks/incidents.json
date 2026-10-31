@@ -1,0 +1,35 @@
+[
+  {
+    "incident_id": "c1f8a9e0-b2c3-4d5e-6f7a-8b9c0d1e2f3a",
+    "actor_id": "8b0c2c1e-7f3a-4e2b-9d1a-4c8e7b2a9012",
+    "actor_label": "ACT-0007",
+    "severity": "critical",
+    "status": "open",
+    "title": "Honeytoken Exfiltration & Decoy Credential Probing on Production",
+    "opened_at": "2026-10-31T09:44:32Z",
+    "updated_at": "2026-10-31T10:05:52Z",
+    "risk_score": 88
+  },
+  {
+    "incident_id": "b2e7a1c0-4f5d-6a7b-8c9d-0e1f2a3b4c5d",
+    "actor_id": "1e9f4a2b-3c4d-5e6f-7a8b-9c0d1e2f3a4b",
+    "actor_label": "ACT-0002",
+    "severity": "high",
+    "status": "ack",
+    "title": "Automated SSH Credential Brute-Force",
+    "opened_at": "2026-10-31T08:15:20Z",
+    "updated_at": "2026-10-31T08:30:12Z",
+    "risk_score": 62
+  },
+  {
+    "incident_id": "a3d6b0b1-5e4c-7b8a-9d0e-1f2a3b4c5d6e",
+    "actor_id": "7a8b9c0d-1e2f-3a4b-5c6d-7e8f9a0b1c2d",
+    "actor_label": "ACT-0003",
+    "severity": "medium",
+    "status": "contained",
+    "title": "Suspicious Port Sweep & Web Discovery",
+    "opened_at": "2026-10-31T07:05:22Z",
+    "updated_at": "2026-10-31T07:12:45Z",
+    "risk_score": 45
+  }
+]

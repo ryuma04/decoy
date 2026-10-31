@@ -1,0 +1,11 @@
+{
+  "items": [
+    {"technique": "T1190", "name": "Exploit Public-Facing Application", "tactic": "Initial Access", "count": 18},
+    {"technique": "T1078", "name": "Valid Accounts", "tactic": "Defense Evasion", "count": 14},
+    {"technique": "T1082", "name": "System Information Discovery", "tactic": "Discovery", "count": 12},
+    {"technique": "T1552.001", "name": "Credentials In Files", "tactic": "Credential Access", "count": 9},
+    {"technique": "T1613", "name": "Container and Resource Discovery", "tactic": "Discovery", "count": 7},
+    {"technique": "T1046", "name": "Network Service Discovery", "tactic": "Discovery", "count": 6},
+    {"technique": "T1526", "name": "Cloud Service Discovery", "tactic": "Discovery", "count": 5}
+  ]
+}

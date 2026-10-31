@@ -1,0 +1,22 @@
+{
+  "actor_id": "8b0c2c1e-7f3a-4e2b-9d1a-4c8e7b2a9012",
+  "nodes": [
+    {"id": "entry_web", "label": "Web Admin (robots.txt)", "kind": "entry", "theme": "ci", "service": "web", "stretch": false, "state": "visited"},
+    {"id": "lure_backup", "label": "Backup Archive (.zip)", "kind": "lure", "theme": "ci", "service": "web", "stretch": false, "state": "visited"},
+    {"id": "ssh_entry", "label": "SSH Staging Host", "kind": "service", "theme": "ci", "service": "ssh", "stretch": false, "state": "visited"},
+    {"id": "lure_kubeconfig", "label": "Kubeconfig File", "kind": "lure", "theme": "k8s", "service": "ssh", "stretch": false, "state": "visited"},
+    {"id": "k8s_api", "label": "Kubernetes API Decoy", "kind": "service", "theme": "k8s", "service": "k8s", "stretch": false, "state": "visited"},
+    {"id": "lure_aws_creds", "label": "AWS Credentials (~/.aws)", "kind": "lure", "theme": "cloud", "service": "ssh", "stretch": false, "state": "visited"},
+    {"id": "beacon_aws", "label": "AWS STS Beacon Decoy", "kind": "service", "theme": "cloud", "service": "beacon", "stretch": false, "state": "visited"},
+    {"id": "stretch_db", "label": "Postgres Read Replica", "kind": "service", "theme": "db", "service": "dbadmin", "stretch": true, "state": "hidden"}
+  ],
+  "edges": [
+    {"from": "entry_web", "to": "lure_backup", "label": "found in /robots.txt"},
+    {"from": "lure_backup", "to": "ssh_entry", "label": "extracted deploy_rsa key"},
+    {"from": "ssh_entry", "to": "lure_kubeconfig", "label": "unlocked via /opt/deploy search"},
+    {"from": "lure_kubeconfig", "to": "k8s_api", "label": "bearer token authenticated"},
+    {"from": "ssh_entry", "to": "lure_aws_creds", "label": "grep for AWS keys"},
+    {"from": "lure_aws_creds", "to": "beacon_aws", "label": "STS GetCallerIdentity probe"},
+    {"from": "k8s_api", "to": "stretch_db", "label": "secrets inspection"}
+  ]
+}

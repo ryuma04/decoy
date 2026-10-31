@@ -1,0 +1,64 @@
+[
+  {
+    "event": "event",
+    "data": {
+      "event_id": "ev-stream-101",
+      "ts": "2026-10-31T10:10:00Z",
+      "type": "shell.command",
+      "origin": "decoy",
+      "service": "ssh",
+      "sensor_id": "ssh-01",
+      "session_id": "sess-ssh-01",
+      "actor_id": "8b0c2c1e-7f3a-4e2b-9d1a-4c8e7b2a9012",
+      "actor_label": "ACT-0007",
+      "src_ip": "10.66.0.41",
+      "data": {"raw": "curl -s http://169.254.169.254/latest/meta-data/"},
+      "tokens": [],
+      "summary": "curl -s http://169.254.169.254/latest/meta-data/"
+    }
+  },
+  {
+    "event": "finding",
+    "data": {
+      "finding_id": 104,
+      "actor_id": "8b0c2c1e-7f3a-4e2b-9d1a-4c8e7b2a9012",
+      "session_id": "sess-ssh-01",
+      "rule_id": "rule_imds_probe",
+      "title": "Cloud Instance Metadata Service Discovery",
+      "tactic": "Discovery",
+      "technique": "T1552.005",
+      "technique_name": "Cloud Instance Metadata API",
+      "stage": "post_access",
+      "points": 25,
+      "confidence": 0.95,
+      "source": "rule",
+      "evidence": {
+        "event_ids": ["ev-stream-101"],
+        "matched": "http://169.254.169.254"
+      },
+      "ts": "2026-10-31T10:10:01Z"
+    }
+  },
+  {
+    "event": "actor",
+    "data": {
+      "actor_id": "8b0c2c1e-7f3a-4e2b-9d1a-4c8e7b2a9012",
+      "label": "ACT-0007",
+      "first_seen": "2026-10-31T09:42:15Z",
+      "last_seen": "2026-10-31T10:10:01Z",
+      "risk_score": 91,
+      "severity": "critical",
+      "confidence": 0.95,
+      "behaviour_class": "agent_like",
+      "services": ["web", "ssh", "k8s", "beacon"],
+      "session_count": 4,
+      "ips": ["10.66.0.23", "10.66.0.41"],
+      "top_techniques": ["T1190", "T1078", "T1613", "T1552.001", "T1552.005"],
+      "token_hits": 2,
+      "maze_depth": 4,
+      "kill_chain_stage": "lateral",
+      "touched_production": true,
+      "tools": ["nmap", "sqlmap", "curl"]
+    }
+  }
+]

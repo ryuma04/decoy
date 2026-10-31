@@ -1,0 +1,52 @@
+[
+  {
+    "token_id": "tok_aws_k7",
+    "kind": "aws_key",
+    "planted_at": "ssh-01:~/.aws/credentials",
+    "sensitivity": 5,
+    "burned": true,
+    "hits_seen": 3,
+    "hits_used": 1,
+    "last_hit": "2026-10-31T10:02:11Z"
+  },
+  {
+    "token_id": "tok_kube_cfg",
+    "kind": "kubeconfig",
+    "planted_at": "ssh-01:/opt/deploy/kubeconfig",
+    "sensitivity": 4,
+    "burned": false,
+    "hits_seen": 2,
+    "hits_used": 1,
+    "last_hit": "2026-10-31T09:57:00Z"
+  },
+  {
+    "token_id": "tok_backup_zip",
+    "kind": "backup_archive",
+    "planted_at": "web-01:/admin/backup/internal-backup.zip",
+    "sensitivity": 3,
+    "burned": false,
+    "hits_seen": 1,
+    "hits_used": 1,
+    "last_hit": "2026-10-31T09:43:40Z"
+  },
+  {
+    "token_id": "tok_db_env",
+    "kind": "db_credentials",
+    "planted_at": "ssh-01:/etc/app/database.env",
+    "sensitivity": 3,
+    "burned": false,
+    "hits_seen": 0,
+    "hits_used": 0,
+    "last_hit": null
+  },
+  {
+    "token_id": "tok_beacon_url",
+    "kind": "webhook_url",
+    "planted_at": "web-01:/api/v1/health/ping",
+    "sensitivity": 2,
+    "burned": false,
+    "hits_seen": 0,
+    "hits_used": 0,
+    "last_hit": null
+  }
+]

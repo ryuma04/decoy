@@ -1,8 +1,9 @@
 "use client";
 
-// One EventSource('/api/stream') shared through context (11 §SSE handling). EventSource reconnects on its own;
-// we track the state for the "Live" dot.
+// One EventSource('/api/stream') shared through context (11 §SSE handling).
+// Replays src/mocks/stream.json every 1.5 s when NEXT_PUBLIC_USE_MOCKS=1.
 import { createContext, useContext, useEffect, useRef, useState, type ReactNode } from "react";
+import mockStream from "@/mocks/stream.json";
 
 type Handler = (data: unknown) => void;
 type Status = "connecting" | "live" | "reconnecting";
@@ -21,12 +22,26 @@ export function StreamProvider({ children }: { children: ReactNode }) {
   const attached = useRef(new Set<string>());
 
   useEffect(() => {
+    if (process.env.NEXT_PUBLIC_USE_MOCKS === "1") {
+      setStatus("live");
+      let idx = 0;
+      const interval = setInterval(() => {
+        if (!mockStream.length) return;
+        const item = mockStream[idx % mockStream.length];
+        idx++;
+        if (!item) return;
+        handlers.current.get(item.event)?.forEach((h) => h(item.data));
+      }, 1500);
+      return () => clearInterval(interval);
+    }
+
     const source = new EventSource("/api/stream");
     const names = attached.current;
     es.current = source;
     source.onopen = () => setStatus("live");
     source.onerror = () => setStatus("reconnecting");
     for (const name of handlers.current.keys()) attach(name);
+
     return () => {
       source.close();
       es.current = null;
@@ -38,10 +53,10 @@ export function StreamProvider({ children }: { children: ReactNode }) {
     const source = es.current;
     if (!source || attached.current.has(name)) return;
     attached.current.add(name);
-    source.addEventListener(name, (e) => {
+    source.addEventListener(name, (e: MessageEvent<string>) => {
       let data: unknown;
       try {
-        data = JSON.parse((e as MessageEvent<string>).data);
+        data = JSON.parse(e.data);
       } catch {
         return;
       }

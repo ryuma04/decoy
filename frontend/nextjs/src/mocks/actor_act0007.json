@@ -1,0 +1,263 @@
+{
+  "actor_id": "8b0c2c1e-7f3a-4e2b-9d1a-4c8e7b2a9012",
+  "label": "ACT-0007",
+  "first_seen": "2026-10-31T09:42:15Z",
+  "last_seen": "2026-10-31T10:05:52Z",
+  "risk_score": 88,
+  "severity": "critical",
+  "confidence": 0.93,
+  "behaviour_class": "agent_like",
+  "services": ["web", "ssh", "k8s", "beacon"],
+  "session_count": 4,
+  "ips": ["10.66.0.23", "10.66.0.41"],
+  "top_techniques": ["T1190", "T1078", "T1613", "T1552.001"],
+  "token_hits": 2,
+  "maze_depth": 4,
+  "kill_chain_stage": "lateral",
+  "touched_production": true,
+  "tools": ["nmap", "sqlmap", "curl"],
+  "tool_tags": [
+    {
+      "tool": "nmap",
+      "first_seen": "2026-10-31T09:42:15Z",
+      "event_id": "ev-001",
+      "evidence": "TCP SYN port sweep against ports 22, 80, 443, 6443"
+    },
+    {
+      "tool": "sqlmap",
+      "first_seen": "2026-10-31T09:44:30Z",
+      "event_id": "ev-003",
+      "evidence": "User-Agent: sqlmap/1.7#stable on /api/diagnostics"
+    },
+    {
+      "tool": "curl",
+      "first_seen": "2026-10-31T09:56:10Z",
+      "event_id": "ev-014",
+      "evidence": "Bearer token API request to k8s API"
+    }
+  ],
+  "external": {
+    "firewall_denies": 14,
+    "real_auth_failed": 3,
+    "real_auth_success": 1,
+    "systems": ["corp-vpn-gw.prod.internal", "db-primary.prod.internal"]
+  },
+  "risk_breakdown": {
+    "p": 0.93,
+    "z": 2.8,
+    "weights_version": 3,
+    "stage_scores": {
+      "recon": 12,
+      "access": 25,
+      "post_access": 35,
+      "lateral": 40
+    },
+    "contributions": {
+      "recon": 4,
+      "access": 18,
+      "post_access": 31,
+      "lateral": 35
+    },
+    "bias": -1.2,
+    "override": "token_used_sensitivity_5"
+  },
+  "sessions": [
+    {
+      "session_id": "sess-web-01",
+      "sensor_session_id": "web-01:99a8b1",
+      "actor_id": "8b0c2c1e-7f3a-4e2b-9d1a-4c8e7b2a9012",
+      "service": "web",
+      "sensor_id": "web-01",
+      "src_ip": "10.66.0.23",
+      "started_at": "2026-10-31T09:43:00Z",
+      "ended_at": "2026-10-31T09:48:00Z",
+      "event_count": 18,
+      "link_score": 1.0,
+      "link_reasons": [
+        {
+          "signal": "src_ip",
+          "weight": 1.0,
+          "matched_session": null,
+          "value": "10.66.0.23"
+        }
+      ]
+    },
+    {
+      "session_id": "sess-ssh-01",
+      "sensor_session_id": "ssh-01:7f3a9c",
+      "actor_id": "8b0c2c1e-7f3a-4e2b-9d1a-4c8e7b2a9012",
+      "service": "ssh",
+      "sensor_id": "ssh-01",
+      "src_ip": "10.66.0.41",
+      "started_at": "2026-10-31T09:49:15Z",
+      "ended_at": "2026-10-31T09:55:00Z",
+      "event_count": 34,
+      "link_score": 0.93,
+      "link_reasons": [
+        {
+          "signal": "credential_lineage",
+          "weight": 0.93,
+          "matched_session": "sess-web-01",
+          "value": "Stole deploy_rsa from internal-backup.zip"
+        }
+      ]
+    },
+    {
+      "session_id": "sess-k8s-01",
+      "sensor_session_id": "k8s-01:33b1e2",
+      "actor_id": "8b0c2c1e-7f3a-4e2b-9d1a-4c8e7b2a9012",
+      "service": "k8s",
+      "sensor_id": "k8s-01",
+      "src_ip": "10.66.0.41",
+      "started_at": "2026-10-31T09:56:00Z",
+      "ended_at": "2026-10-31T10:01:20Z",
+      "event_count": 12,
+      "link_score": 0.89,
+      "link_reasons": [
+        {
+          "signal": "credential_lineage",
+          "weight": 0.89,
+          "matched_session": "sess-ssh-01",
+          "value": "Used bearer token found in /opt/deploy/kubeconfig"
+        }
+      ]
+    },
+    {
+      "session_id": "sess-beacon-01",
+      "sensor_session_id": "beacon-01:44c5d6",
+      "actor_id": "8b0c2c1e-7f3a-4e2b-9d1a-4c8e7b2a9012",
+      "service": "beacon",
+      "sensor_id": "beacon-01",
+      "src_ip": "10.66.0.23",
+      "started_at": "2026-10-31T10:02:10Z",
+      "ended_at": "2026-10-31T10:05:52Z",
+      "event_count": 6,
+      "link_score": 0.95,
+      "link_reasons": [
+        {
+          "signal": "token_provenance",
+          "weight": 0.95,
+          "matched_session": "sess-ssh-01",
+          "value": "Used AWS key AKIAEXAMPLE99 from ~/.aws/credentials"
+        }
+      ]
+    }
+  ],
+  "fingerprints": [
+    {
+      "kind": "ssh_pubkey",
+      "value": "SHA256:d8c1e7a2b9f0... (deploy_rsa)",
+      "session_ids": ["sess-ssh-01"]
+    },
+    {
+      "kind": "ja4_fingerprint",
+      "value": "t13d1516h2_8daaf6152771_0266e522b2d6",
+      "session_ids": ["sess-web-01", "sess-k8s-01"]
+    }
+  ],
+  "findings": [
+    {
+      "finding_id": 1,
+      "actor_id": "8b0c2c1e-7f3a-4e2b-9d1a-4c8e7b2a9012",
+      "session_id": "sess-web-01",
+      "rule_id": "rule_cmd_injection",
+      "title": "Command Injection in Diagnostic Endpoint",
+      "tactic": "Initial Access",
+      "technique": "T1190",
+      "technique_name": "Exploit Public-Facing Application",
+      "stage": "access",
+      "points": 25,
+      "confidence": 0.98,
+      "source": "rule+ml",
+      "evidence": {
+        "event_ids": ["ev-004"],
+        "matched": "; cat /etc/passwd",
+        "ml": {
+          "label": "cmd_injection",
+          "risk": 0.97,
+          "confidence": 0.95,
+          "top_features": ["; cat", "/etc/passwd"],
+          "was_encoded": false
+        }
+      },
+      "ts": "2026-10-31T09:44:32Z"
+    },
+    {
+      "finding_id": 2,
+      "actor_id": "8b0c2c1e-7f3a-4e2b-9d1a-4c8e7b2a9012",
+      "session_id": "sess-ssh-01",
+      "rule_id": "rule_cloud_cred_search",
+      "title": "Cloud Credentials Exfiltration",
+      "tactic": "Credential Access",
+      "technique": "T1552.001",
+      "technique_name": "Credentials in Files",
+      "stage": "post_access",
+      "points": 35,
+      "confidence": 1.0,
+      "source": "rule",
+      "evidence": {
+        "event_ids": ["ev-008", "ev-009"],
+        "matched": "cat ~/.aws/credentials"
+      },
+      "ts": "2026-10-31T09:51:20Z"
+    },
+    {
+      "finding_id": 3,
+      "actor_id": "8b0c2c1e-7f3a-4e2b-9d1a-4c8e7b2a9012",
+      "session_id": "sess-beacon-01",
+      "rule_id": "rule_token_beacon_hit",
+      "title": "Critical Honeytoken Triggered at Beacon",
+      "tactic": "Lateral Movement",
+      "technique": "T1078",
+      "technique_name": "Valid Accounts",
+      "stage": "lateral",
+      "points": 40,
+      "confidence": 1.0,
+      "source": "rule",
+      "evidence": {
+        "event_ids": ["ev-019"],
+        "matched": "AKIAEXAMPLE99 SigV4 request"
+      },
+      "ts": "2026-10-31T10:02:11Z"
+    }
+  ],
+  "behaviour": {
+    "class": "agent_like",
+    "scores": {
+      "agent_like": 0.71,
+      "scripted": 0.18,
+      "human_like": 0.11
+    },
+    "source": "rules",
+    "features": {
+      "median_gap_ms": 5400,
+      "gap_cv": 0.21,
+      "edit_rate": 0,
+      "paste_rate": 0.9,
+      "output_dependence": 0.62,
+      "services_visited": 4,
+      "breadcrumbs_followed": 3,
+      "param_mutation_retries": 5,
+      "commands": 27
+    }
+  },
+  "interest": {
+    "cloud": 4,
+    "k8s": 9,
+    "db": 0,
+    "ci": 2
+  },
+  "incident_id": "c1f8a9e0-b2c3-4d5e-6f7a-8b9c0d1e2f3a",
+  "narrative": {
+    "headline": "ACT-0007 stole a planted cloud key and tried it against the AWS-style endpoint",
+    "text": "The actor downloaded internal-backup.zip from web decoy, used the SSH deploy key inside it to log in on ssh-01, ran discovery commands looking for Kubernetes and AWS secrets, then tried the planted AWS key against the beacon.",
+    "bullets": [
+      "Honeytoken tok_aws_k7 used (critical)",
+      "Linked across 4 decoys via credential lineage",
+      "Attempted decoy credentials on corp-vpn-gw in production"
+    ],
+    "source": "llm",
+    "model": "gemini-3.5-flash-lite",
+    "generated_at": "2026-10-31T10:06:00Z"
+  }
+}

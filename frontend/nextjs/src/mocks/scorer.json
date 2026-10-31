@@ -1,0 +1,15 @@
+{
+  "version": 3,
+  "weights": {
+    "recon": 0.35,
+    "access": 0.72,
+    "post_access": 0.88,
+    "lateral": 0.95
+  },
+  "bias": -1.2,
+  "learning_rate": 0.05,
+  "learning_enabled": true,
+  "feedback_confirmed": 14,
+  "feedback_false_positive": 2,
+  "updated_at": "2026-10-31T09:15:00Z"
+}

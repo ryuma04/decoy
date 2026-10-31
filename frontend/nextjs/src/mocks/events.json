@@ -1,0 +1,130 @@
+{
+  "items": [
+    {
+      "event_id": "ev-022",
+      "ts": "2026-10-31T10:04:15Z",
+      "type": "auth.failed",
+      "origin": "production",
+      "service": "appauth",
+      "sensor_id": "prod-auth-01",
+      "session_id": "sess-prod-01",
+      "actor_id": "8b0c2c1e-7f3a-4e2b-9d1a-4c8e7b2a9012",
+      "actor_label": "ACT-0007",
+      "src_ip": "10.66.0.41",
+      "data": {"target": "corp-vpn-gw.prod.internal", "user": "deploy"},
+      "tokens": [],
+      "summary": "App login (production) attempted on corp-vpn-gw with stolen deploy credential",
+      "envelope": {
+        "event_id": "ev-022",
+        "ts": "2026-10-31T10:04:15Z",
+        "type": "auth.failed",
+        "origin": "production",
+        "service": "appauth",
+        "sensor_id": "prod-auth-01",
+        "session_id": "sess-prod-01",
+        "data": {"target": "corp-vpn-gw.prod.internal", "user": "deploy"}
+      }
+    },
+    {
+      "event_id": "ev-019",
+      "ts": "2026-10-31T10:02:11Z",
+      "type": "token.used",
+      "origin": "decoy",
+      "service": "beacon",
+      "sensor_id": "beacon-01",
+      "session_id": "sess-beacon-01",
+      "actor_id": "8b0c2c1e-7f3a-4e2b-9d1a-4c8e7b2a9012",
+      "actor_label": "ACT-0007",
+      "src_ip": "10.66.0.23",
+      "data": {"action": "sts:GetCallerIdentity", "token_id": "tok_aws_k7"},
+      "tokens": ["tok_aws_k7"],
+      "summary": "Honeytoken tok_aws_k7 used on beacon service",
+      "envelope": {
+        "event_id": "ev-019",
+        "ts": "2026-10-31T10:02:11Z",
+        "type": "token.used",
+        "origin": "decoy",
+        "service": "beacon",
+        "sensor_id": "beacon-01",
+        "session_id": "sess-beacon-01",
+        "data": {"action": "sts:GetCallerIdentity", "token_id": "tok_aws_k7"}
+      }
+    },
+    {
+      "event_id": "ev-015",
+      "ts": "2026-10-31T09:57:00Z",
+      "type": "k8s.api_request",
+      "origin": "decoy",
+      "service": "k8s",
+      "sensor_id": "k8s-01",
+      "session_id": "sess-k8s-01",
+      "actor_id": "8b0c2c1e-7f3a-4e2b-9d1a-4c8e7b2a9012",
+      "actor_label": "ACT-0007",
+      "src_ip": "10.66.0.41",
+      "data": {"verb": "list", "resource": "pods", "namespace": "kube-system"},
+      "tokens": ["tok_kube_cfg"],
+      "summary": "K8s API list pods in namespace kube-system",
+      "envelope": {
+        "event_id": "ev-015",
+        "ts": "2026-10-31T09:57:00Z",
+        "type": "k8s.api_request",
+        "origin": "decoy",
+        "service": "k8s",
+        "sensor_id": "k8s-01",
+        "session_id": "sess-k8s-01",
+        "data": {"verb": "list", "resource": "pods", "namespace": "kube-system"}
+      }
+    },
+    {
+      "event_id": "ev-007",
+      "ts": "2026-10-31T09:49:15Z",
+      "type": "auth.success",
+      "origin": "decoy",
+      "service": "ssh",
+      "sensor_id": "ssh-01",
+      "session_id": "sess-ssh-01",
+      "actor_id": "8b0c2c1e-7f3a-4e2b-9d1a-4c8e7b2a9012",
+      "actor_label": "ACT-0007",
+      "src_ip": "10.66.0.41",
+      "data": {"user": "deploy", "auth_method": "publickey", "key_fp": "SHA256:d8c1e7a2b9f0..."},
+      "tokens": ["tok_backup_zip"],
+      "summary": "SSH login as deploy via stolen deploy key",
+      "envelope": {
+        "event_id": "ev-007",
+        "ts": "2026-10-31T09:49:15Z",
+        "type": "auth.success",
+        "origin": "decoy",
+        "service": "ssh",
+        "sensor_id": "ssh-01",
+        "session_id": "sess-ssh-01",
+        "data": {"user": "deploy", "auth_method": "publickey", "key_fp": "SHA256:d8c1e7a2b9f0..."}
+      }
+    },
+    {
+      "event_id": "ev-004",
+      "ts": "2026-10-31T09:44:32Z",
+      "type": "http.post",
+      "origin": "decoy",
+      "service": "web",
+      "sensor_id": "web-01",
+      "session_id": "sess-web-01",
+      "actor_id": "8b0c2c1e-7f3a-4e2b-9d1a-4c8e7b2a9012",
+      "actor_label": "ACT-0007",
+      "src_ip": "10.66.0.23",
+      "data": {"path": "/api/diagnostics", "body": "host=8.8.8.8;cat /etc/passwd"},
+      "tokens": [],
+      "summary": "POST /api/diagnostics host=8.8.8.8;cat /etc/passwd",
+      "envelope": {
+        "event_id": "ev-004",
+        "ts": "2026-10-31T09:44:32Z",
+        "type": "http.post",
+        "origin": "decoy",
+        "service": "web",
+        "sensor_id": "web-01",
+        "session_id": "sess-web-01",
+        "data": {"path": "/api/diagnostics", "body": "host=8.8.8.8;cat /etc/passwd"}
+      }
+    }
+  ],
+  "next_cursor": null
+}
