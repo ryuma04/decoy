@@ -20,3 +20,4 @@ COPY scripts/attack.sh /scripts/attack.sh
 RUN chmod +x /scripts/attack.sh
 
 ENTRYPOINT ["/scripts/attack.sh"]
+

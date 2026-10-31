@@ -280,3 +280,4 @@ echo " [✔] Attack run completed successfully."
 echo " Actor profile: 4 linked sessions (Web, SSH, K8s, Beacon)"
 echo " Risk escalated to CRITICAL (>= 75) with open incident."
 echo "======================================================================"
+
