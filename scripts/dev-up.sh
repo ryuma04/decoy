@@ -51,7 +51,7 @@ wait_for core http://127.0.0.1:8090/healthz
 if command -v docker >/dev/null 2>&1 && docker info >/dev/null 2>&1; then
   if ! docker ps --format '{{.Names}}' | grep -q '^decoy-sandbox$'; then
     docker rm -f decoy-sandbox 2>/dev/null || true
-    docker run -d --name decoy-sandbox -p 127.0.0.1:22222:22222 decoy-sandbox:latest >/dev/null 2>&1 || true
+    docker run -d --name decoy-sandbox -p 127.0.0.1:22222:22222 --add-host s3.harborline-logistics.internal:127.0.0.1 --add-host k8s.harborline-logistics.internal:127.0.0.1 --add-host db.harborline-logistics.internal:127.0.0.1 --add-host hal-app-01:127.0.0.1 decoy-sandbox:latest >/dev/null 2>&1 || true
     echo "  decoy-sandbox (Docker real terminal container) up on :22222"
   else
     echo "  decoy-sandbox (Docker real terminal container) running on :22222"

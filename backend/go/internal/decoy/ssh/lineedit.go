@@ -189,8 +189,8 @@ func (e *LineEditor) escape(out *strings.Builder) bool {
 		return false
 	}
 	last := s[len(s)-1]
-	if last >= '0' && last <= '9' || last == ';' {
-		return len(s) > 8 // parameter bytes; give up on very long sequences
+	if (last >= 0x30 && last <= 0x3F) || (last >= 0x20 && last <= 0x2F) {
+		return len(s) > 16 // parameter or intermediate bytes; give up on very long sequences
 	}
 	e.keystrokes++
 	e.edits++

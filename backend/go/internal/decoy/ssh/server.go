@@ -976,11 +976,12 @@ func LoadLuresFromSeed(seedDir string) ([]Lure, error) {
 	}
 
 	var tokens map[string]struct {
-		TokenID  string `json:"token_id"`
-		Path     string `json:"path"`
-		Content  string `json:"content"`
-		Hidden   bool   `json:"hidden"`
-		MazeNode string `json:"maze_node"`
+		TokenID    string `json:"token_id"`
+		Path       string `json:"path"`
+		Content    string `json:"content"`
+		Hidden     bool   `json:"hidden"`
+		MazeNode   string `json:"maze_node"`
+		MatchValue string `json:"match_value"`
 	}
 	if err := json.Unmarshal(data, &tokens); err != nil {
 		return nil, fmt.Errorf("parse tokens.json: %w", err)
@@ -1001,6 +1002,7 @@ func LoadLuresFromSeed(seedDir string) ([]Lure, error) {
 			MazeNode:    t.MazeNode,
 			Owner:       owner,
 			Hidden:      t.Hidden,
+			MatchValue:  t.MatchValue,
 		})
 	}
 	return lures, nil
@@ -1051,6 +1053,35 @@ func (s *Server) proxyToSandbox(ch ssh.Channel, reqs <-chan *ssh.Request, st *co
 		return false
 	}
 
+	var lastCmdTime = time.Now()
+	emitCmd := func(raw string) {
+		raw = strings.TrimSpace(raw)
+		if raw == "" {
+			return
+		}
+		parts := strings.Fields(raw)
+		argv0 := parts[0]
+		var args []string
+		if len(parts) > 1 {
+			args = parts[1:]
+		}
+		sincePrev := time.Since(lastCmdTime).Milliseconds()
+		lastCmdTime = time.Now()
+
+		timing := &event.Timing{
+			SincePrevMS: sincePrev,
+			Keystrokes:  len(raw),
+		}
+		slog.Info("shell command captured", "raw", raw, "session", st.session.ID)
+		st.session.Event("shell.command", mazeNode, shellCommandData{
+			Raw:   raw,
+			Argv0: argv0,
+			Args:  args,
+			Cwd:   st.user.Home,
+			Exit:  0,
+		}, timing, nil)
+	}
+
 	go func() {
 		for req := range reqs {
 			switch req.Type {
@@ -1092,6 +1123,9 @@ func (s *Server) proxyToSandbox(ch ssh.Channel, reqs <-chan *ssh.Request, st *co
 						cmd = string(req.Payload[4 : 4+l])
 					}
 				}
+				if cmd != "" {
+					emitCmd(cmd)
+				}
 				_ = cSession.Start(cmd)
 				if req.WantReply {
 					req.Reply(true, nil)
@@ -1106,7 +1140,7 @@ func (s *Server) proxyToSandbox(ch ssh.Channel, reqs <-chan *ssh.Request, st *co
 
 	var triggerMu sync.Mutex
 	triggered := map[string]bool{}
-	emitToken := func(tokenID, pth string) {
+	emitToken := func(tokenID, pth, mNode string) {
 		triggerMu.Lock()
 		defer triggerMu.Unlock()
 		if triggered[tokenID] {
@@ -1114,7 +1148,11 @@ func (s *Server) proxyToSandbox(ch ssh.Channel, reqs <-chan *ssh.Request, st *co
 		}
 		triggered[tokenID] = true
 		tokRef := tokenID
-		st.session.Event("file.read", mazeNode, fileReadData{
+		if mNode == "" {
+			mNode = mazeNode
+		}
+		slog.Info("lure token access captured", "token", tokenID, "path", pth, "mazeNode", mNode)
+		st.session.Event("file.read", mNode, fileReadData{
 			Path:        pth,
 			HoneyfileID: &tokRef,
 			Bytes:       len(tokenID),
@@ -1124,24 +1162,64 @@ func (s *Server) proxyToSandbox(ch ssh.Channel, reqs <-chan *ssh.Request, st *co
 	var wg sync.WaitGroup
 	wg.Add(2)
 
+	editor := NewLineEditor("")
+	for _, l := range s.cfg.Lures {
+		if strings.HasSuffix(l.Path, ".bash_history") {
+			for _, line := range strings.Split(l.Content, "\n") {
+				line = strings.TrimSpace(line)
+				if line != "" {
+					editor.AddHistory(line)
+				}
+			}
+		}
+	}
+
 	go func() {
 		defer sStdin.Close()
-		_, _ = io.Copy(sStdin, ch)
+		buf := make([]byte, 1024)
+		for {
+			n, err := ch.Read(buf)
+			if n > 0 {
+				chunk := buf[:n]
+				_, lines := editor.Feed(chunk)
+				for _, line := range lines {
+					if line.Cancel || line.EOF {
+						continue
+					}
+					cmd := strings.TrimSpace(line.Text)
+					if cmd != "" {
+						emitCmd(cmd)
+						editor.AddHistory(cmd)
+					}
+				}
+				_, _ = sStdin.Write(chunk)
+			}
+			if err != nil {
+				return
+			}
+		}
 	}()
 
 	go func() {
 		defer wg.Done()
 		buf := make([]byte, 4096)
+		var matchWindow string
 		for {
 			n, err := sStdout.Read(buf)
 			if n > 0 {
 				chunk := buf[:n]
-				sChunk := string(chunk)
-				if strings.Contains(sChunk, "AKIA3EXNNKIAOP2SNCD5") {
-					emitToken("tok_aws_k7", "/home/deploy/.aws/credentials")
+				matchWindow += string(chunk)
+				if len(matchWindow) > 16384 {
+					matchWindow = matchWindow[len(matchWindow)-8192:]
 				}
-				if strings.Contains(sChunk, "neaUPVW4RYGJViL9C8iUHxNtr8HULVBeiJKsY0Eg9Lq9GhMv") {
-					emitToken("tok_kube", "/opt/deploy/kubeconfig")
+				for _, lure := range s.cfg.Lures {
+					val := lure.MatchValue
+					if val == "" && lure.HoneyfileID != "" {
+						val = lure.HoneyfileID
+					}
+					if val != "" && strings.Contains(matchWindow, val) {
+						emitToken(lure.HoneyfileID, lure.Path, lure.MazeNode)
+					}
 				}
 				_, _ = ch.Write(chunk)
 			}
