@@ -100,3 +100,4 @@ export function getEventRiskScore(ev: Event): number {
       return 10;
   }
 }
+

@@ -18,7 +18,6 @@ import {
   Pause,
   Play,
   Radio,
-  Server,
   Users,
 } from "@/components/icons";
 import {
@@ -101,7 +100,7 @@ export default function OverviewPage() {
         <div>
           <h1 className="text-[28px] font-semibold tracking-tight text-ink">SOC Overview</h1>
           <p className="mt-1 text-body text-[13px]">
-            Deception telemetry, correlated threat actors, and decoy sensor health across the lab.
+            Deception telemetry, correlated threat actors, and high-fidelity active defense across the lab.
           </p>
           <p className="mt-1 font-mono text-[11px] text-mute">
             {updatedAt ? `Live from the database · updated ${istTime(updatedAt.toISOString())}` : "Loading live data…"}
@@ -116,7 +115,7 @@ export default function OverviewPage() {
       </div>
 
       {/* KPI Cards Row */}
-      <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-5 gap-4">
+      <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
         <KpiCard
           title="Events (1h)"
           value={overview?.events ?? "—"}
@@ -142,13 +141,6 @@ export default function OverviewPage() {
           subtitle="High-fidelity decoys tripped"
           icon={<Radio className="h-4 w-4" />}
           alert={(overview?.token_hits ?? 0) > 0}
-        />
-        <KpiCard
-          title="Sensor Fleet"
-          value={`${overview?.sensors_ok ?? 0} / ${overview?.sensors_total ?? 0}`}
-          subtitle={sensorSubtitle(overview?.sensors_ok, overview?.sensors_total)}
-          alert={overview != null && overview.sensors_ok < overview.sensors_total}
-          icon={<Server className="h-4 w-4" />}
         />
       </div>
 
@@ -385,12 +377,6 @@ function fillMinutes(points: TimeseriesPoint[], n: number): TimeseriesPoint[] {
   return out;
 }
 
-function sensorSubtitle(ok?: number, total?: number): string {
-  if (ok == null || total == null) return "Checking sensors…";
-  if (total === 0) return "No sensors registered";
-  if (ok === total) return "All decoys reporting";
-  return `${total - ok} not reporting (no heartbeat in 90 s)`;
-}
 
 // ---- highest-risk actor card helpers ----
 
