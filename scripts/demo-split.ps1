@@ -11,7 +11,7 @@ Write-Host ""
 # Check services
 $proxyUp = $false
 try {
-    $res = Invoke-WebRequest -Uri "http://localhost:8200/" -Method Head -TimeoutSec 2 -ErrorAction SilentlyContinue
+    $res = Invoke-WebRequest -Uri "http://127.0.0.1:8200/" -UseBasicParsing -TimeoutSec 2 -ErrorAction SilentlyContinue
     if ($res.StatusCode -lt 500) { $proxyUp = $true }
 } catch {
     $proxyUp = $false
@@ -19,7 +19,7 @@ try {
 
 $coreUp = $false
 try {
-    $res = Invoke-WebRequest -Uri "http://localhost:8090/v1/health" -Method Get -TimeoutSec 2 -ErrorAction SilentlyContinue
+    $res = Invoke-WebRequest -Uri "http://127.0.0.1:8090/healthz" -UseBasicParsing -TimeoutSec 2 -ErrorAction SilentlyContinue
     if ($res.StatusCode -eq 200) { $coreUp = $true }
 } catch {
     $coreUp = $false
@@ -27,7 +27,7 @@ try {
 
 $dashUp = $false
 try {
-    $res = Invoke-WebRequest -Uri "http://localhost:3000/" -Method Head -TimeoutSec 2 -ErrorAction SilentlyContinue
+    $res = Invoke-WebRequest -Uri "http://127.0.0.1:3000/login" -UseBasicParsing -TimeoutSec 2 -ErrorAction SilentlyContinue
     if ($res.StatusCode -lt 500) { $dashUp = $true }
 } catch {
     $dashUp = $false
@@ -51,3 +51,4 @@ Write-Host ""
 if ($OpenBrowser -or $dashUp) {
     Start-Process "http://localhost:3000/live-demo"
 }
+

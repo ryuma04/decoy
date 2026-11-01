@@ -43,12 +43,22 @@ $SeedDir = Join-Path $RootDir "backend\go\seed"
 if (!(Test-Path "$SeedDir\out\tokens.json")) {
     Write-Host "Generating seed tokens and persona..." -ForegroundColor Yellow
     Push-Location "$RootDir\backend\go"
-    go run ./cmd/seed
+    go run ./cmd/seed -add-missing
     Pop-Location
 }
 
+# 0. Start ML Service (:8000)
+Write-Host "`n[0/8] Starting ML Service (:8000)..." -ForegroundColor Yellow
+$MlLog = Join-Path $LogDir "ml.log"
+$MlErr = Join-Path $LogDir "ml_err.log"
+$FastApiDir = Join-Path $RootDir "ai-service\fastapi"
+if (Test-Path $FastApiDir) {
+    Start-Process -FilePath "python" -ArgumentList "-m uvicorn app.main:app --host 127.0.0.1 --port 8000" -WorkingDirectory $FastApiDir -RedirectStandardOutput $MlLog -RedirectStandardError $MlErr | Out-Null
+    Write-Host "  ML Service starting on :8000" -ForegroundColor Green
+}
+
 # 1. Start Core
-Write-Host "`n[1/6] Starting Core (sensor :8443, analyst :8090)..." -ForegroundColor Yellow
+Write-Host "`n[1/8] Starting Core (sensor :8443, analyst :8090)..." -ForegroundColor Yellow
 $CoreLog = Join-Path $LogDir "core.log"
 $CoreErr = Join-Path $LogDir "core_err.log"
 Start-Process -FilePath "$BinDir\core.exe" -ArgumentList "serve" -WorkingDirectory "$RootDir\backend\go" -RedirectStandardOutput $CoreLog -RedirectStandardError $CoreErr | Out-Null
@@ -70,7 +80,7 @@ if ($coreOk) {
 }
 
 # 2. Start SSH Decoy (:2222)
-Write-Host "`n[2/6] Starting SSH Decoy (:2222)..." -ForegroundColor Yellow
+Write-Host "`n[2/8] Starting SSH Decoy (:2222)..." -ForegroundColor Yellow
 $SshData = Join-Path $DataDir "ssh"
 if (!(Test-Path $SshData)) { New-Item -ItemType Directory -Path $SshData -Force | Out-Null }
 $SshLog = Join-Path $LogDir "decoy-ssh.log"
@@ -84,7 +94,7 @@ Start-Process -FilePath "$BinDir\decoy-ssh.exe" -WorkingDirectory "$RootDir\back
 Write-Host "  SSH Decoy running on :2222" -ForegroundColor Green
 
 # 3. Start Web Decoy (:8080)
-Write-Host "`n[3/6] Starting Web Decoy (:8080)..." -ForegroundColor Yellow
+Write-Host "`n[3/8] Starting Web Decoy (:8080)..." -ForegroundColor Yellow
 $WebData = Join-Path $DataDir "web"
 if (!(Test-Path $WebData)) { New-Item -ItemType Directory -Path $WebData -Force | Out-Null }
 $WebLog = Join-Path $LogDir "decoy-web.log"
@@ -97,7 +107,7 @@ Start-Process -FilePath "$BinDir\decoy-web.exe" -WorkingDirectory "$RootDir\back
 Write-Host "  Web Decoy running on :8080" -ForegroundColor Green
 
 # 4. Start Beacon Decoy (:8088)
-Write-Host "`n[4/6] Starting Beacon Decoy (:8088)..." -ForegroundColor Yellow
+Write-Host "`n[4/8] Starting Beacon Decoy (:8088)..." -ForegroundColor Yellow
 $BeaconData = Join-Path $DataDir "beacon"
 if (!(Test-Path $BeaconData)) { New-Item -ItemType Directory -Path $BeaconData -Force | Out-Null }
 $BeaconLog = Join-Path $LogDir "decoy-beacon.log"
@@ -110,7 +120,7 @@ Start-Process -FilePath "$BinDir\decoy-beacon.exe" -WorkingDirectory "$RootDir\b
 Write-Host "  Beacon Decoy running on :8088" -ForegroundColor Green
 
 # 5. Start Kubernetes API Decoy (:6443)
-Write-Host "`n[5/6] Starting Kubernetes Decoy (:6443)..." -ForegroundColor Yellow
+Write-Host "`n[5/8] Starting Kubernetes Decoy (:6443)..." -ForegroundColor Yellow
 $K8sData = Join-Path $DataDir "k8s"
 if (!(Test-Path $K8sData)) { New-Item -ItemType Directory -Path $K8sData -Force | Out-Null }
 $K8sLog = Join-Path $LogDir "decoy-k8s.log"
@@ -123,14 +133,24 @@ Start-Process -FilePath "$BinDir\decoy-k8s.exe" -WorkingDirectory "$RootDir\back
 Write-Host "  K8s API Decoy running on :6443" -ForegroundColor Green
 
 # 6. Start Dashboard (:3000)
-Write-Host "`n[6/6] Starting Dashboard (http://localhost:3000)..." -ForegroundColor Yellow
+Write-Host "`n[6/8] Starting Dashboard (http://localhost:3000)..." -ForegroundColor Yellow
 $DashLog = Join-Path $LogDir "dashboard.log"
 $DashErr = Join-Path $LogDir "dashboard_err.log"
 $FrontendDir = Join-Path $RootDir "frontend\nextjs"
 Start-Process -FilePath "cmd.exe" -ArgumentList "/c npm run dev" -WorkingDirectory $FrontendDir -RedirectStandardOutput $DashLog -RedirectStandardError $DashErr | Out-Null
 Write-Host "  Dashboard starting on http://localhost:3000" -ForegroundColor Green
 
-# Optional: Start Divert Proxy if built and lab is present
+# 7. Start Aetees Lab Shop Upstreams (:3100 real, :3101 clone)
+Write-Host "`n[7/8] Starting Aetees Lab Shop Upstreams (:3100, :3101)..." -ForegroundColor Yellow
+$LabShopLog = Join-Path $LogDir "lab-shop.log"
+$LabShopErr = Join-Path $LogDir "lab-shop_err.log"
+$LabShopScript = Join-Path $RootDir "scripts\lab-shop.mjs"
+if (Test-Path $LabShopScript) {
+    Start-Process -FilePath "node" -ArgumentList $LabShopScript -WorkingDirectory $RootDir -RedirectStandardOutput $LabShopLog -RedirectStandardError $LabShopErr | Out-Null
+    Write-Host "  Lab Shop Upstreams running on :3100 (real) and :3101 (clone)" -ForegroundColor Green
+}
+
+# 8. Start Divert Proxy (:8200)
 $DivertExe = Join-Path $BinDir "divert-proxy.exe"
 if (Test-Path $DivertExe) {
     $AeteesData = Join-Path $DataDir "aetees"
@@ -142,6 +162,7 @@ if (Test-Path $DivertExe) {
     Set-Item -Path "env:LISTEN_ADDR" -Value ":8200"
     Set-Item -Path "env:REAL_URL" -Value "http://127.0.0.1:3100"
     Set-Item -Path "env:CLONE_URL" -Value "http://127.0.0.1:3101"
+    Set-Item -Path "env:CORE_URL" -Value "http://127.0.0.1:8443"
     Set-Item -Path "env:DATA_DIR" -Value $AeteesData
     Start-Process -FilePath $DivertExe -WorkingDirectory "$RootDir\backend\go" -RedirectStandardOutput $DivertLog -RedirectStandardError $DivertErr | Out-Null
     Write-Host "  Divert Proxy running on :8200" -ForegroundColor Green
@@ -159,8 +180,7 @@ Write-Host "  Web Decoy:     http://localhost:8080" -ForegroundColor White
 Write-Host "  SSH Decoy:     ssh -p 2222 deploy@localhost" -ForegroundColor White
 Write-Host "  Beacon Decoy:  http://localhost:8088" -ForegroundColor White
 Write-Host "  K8s API Decoy: https://localhost:6443" -ForegroundColor White
-if (Test-Path $DivertExe) {
-    Write-Host "  Divert Proxy:  http://localhost:8200" -ForegroundColor White
-}
+Write-Host "  Lab Shop:      http://localhost:3100 (real), http://localhost:3101 (clone)" -ForegroundColor White
+Write-Host "  Divert Proxy:  http://localhost:8200" -ForegroundColor White
 Write-Host "========================================================" -ForegroundColor Green
 Write-Host "To stop all services anytime, run: .\scripts\dev-down.ps1`n" -ForegroundColor DarkGray
