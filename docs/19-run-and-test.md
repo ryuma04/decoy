@@ -181,6 +181,23 @@ From an outside network (phone hotspot):
 Same tests without the domain: send requests to `http://127.0.0.1:8200` with `Host:`, `CF-Connecting-IP:` and
 `X-Forwarded-Proto: https` headers (what cloudflared sends).
 
+### Held actions (false-positive recovery with replay)
+While a visitor is **soft**-diverted (a possible false positive):
+- `POST /api/contact` is recorded, not executed, and answered `{"success":true}` like the real shop. On release
+  (clean behaviour, Dashboard -> Diversions -> Release, or a verified real admin login) it is replayed once on the real
+  shop with the visitor's real IP; transient failures (5xx, 429, network) are retried 3 times. Live Events shows
+  `... (held: will be delivered after release)`, then `session.released ... N held request(s) being delivered`, then
+  `... (held request replayed on the real shop: delivered|failed)`.
+- `POST /api/checkout` is never recorded (payment needs the customer): "We're receiving a lot of orders right now.
+  Please try again in a minute." The cart stays in the browser.
+- Fallback: if a message cannot be recorded (queue of 5 full, body over 16 KB) the visitor gets the same "try again".
+- A visitor who turns **hard** (lure, honeytoken, exploit) loses the queue: an attacker's request never reaches the
+  real shop. Held messages expire after 24 h.
+Test: as a soft visitor (`curl` user-agent on /menu, then a browser user-agent with the same cookie) send a contact
+message, release the IP in Diversions, browse a page, and watch Live Events. In the lab the replay shows `failed`
+because the lab shop has no mail keys (its own contact form returns 500 too); against a configured shop it is
+`delivered`.
+
 ## Clean slate before a demo
 `scripts/reset-demo.sh` is a dry run: it lists how many rows each table holds and changes nothing.
 `scripts/reset-demo.sh -yes` deletes all recorded activity (events, sessions, actors, findings, token hits, incidents,
