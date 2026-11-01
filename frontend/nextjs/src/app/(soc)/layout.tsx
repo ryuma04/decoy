@@ -71,6 +71,7 @@ function SocShell({ children }: { children: React.ReactNode }) {
 
   const navItems = [
     { href: "/", label: "Overview", icon: LayoutDashboard },
+    { href: "/live-demo", label: "Live Split Demo", icon: Sparkles },
     { href: "/events", label: "Live Events", icon: Activity },
     { href: "/actors", label: "Actors", icon: Users },
     { href: "/incidents", label: "Incidents", icon: ShieldAlert },

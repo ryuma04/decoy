@@ -17,6 +17,7 @@ type Lure struct {
 	Owner       string `json:"owner"`
 	Mode        string `json:"mode"`
 	Hidden      bool   `json:"hidden"`
+	MatchValue  string `json:"match_value"`
 }
 
 // BaseTree builds the shared fake filesystem from the persona plus seeded lures.

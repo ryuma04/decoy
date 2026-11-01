@@ -81,6 +81,7 @@ start() { # name port db admin_password admin_secret
     NODE_ENV=production NEXT_TELEMETRY_DISABLED=1 exec nohup npx next start -p "$2" -H 127.0.0.1) \
     > ".logs/aetees-$1.log" 2>&1 < /dev/null &
   echo "$! aetees-$1" >> .logs/pids
+  disown $! 2>/dev/null || true
 }
 PORTS="3101"
 if [ -z "${AETEES_REAL_URL:-}" ]; then

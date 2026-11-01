@@ -8,7 +8,9 @@ import (
 	"crypto/ed25519"
 	"crypto/rand"
 	"crypto/sha256"
+	"encoding/binary"
 	"encoding/json"
+	"io"
 	"encoding/pem"
 	"fmt"
 	"log/slog"
@@ -59,6 +61,7 @@ type ServerConfig struct {
 	MaxCommands  int
 	MinLatencyMS int
 	MaxLatencyMS int
+	DockerSandboxAddr string
 }
 
 // Server is the SSH decoy.
@@ -429,6 +432,12 @@ func (s *Server) handleSession(ch ssh.Channel, reqs <-chan *ssh.Request, st *con
 	cconn *countingConn, host string, connStart time.Time) {
 
 	defer ch.Close()
+
+	if s.cfg.DockerSandboxAddr != "" {
+		if s.proxyToSandbox(ch, reqs, st, cconn, host, connStart) {
+			return
+		}
+	}
 
 	base := BaseTree(s.cfg.Persona, s.cfg.Lures)
 	fs := fakefs.NewSession(base)
@@ -967,11 +976,12 @@ func LoadLuresFromSeed(seedDir string) ([]Lure, error) {
 	}
 
 	var tokens map[string]struct {
-		TokenID  string `json:"token_id"`
-		Path     string `json:"path"`
-		Content  string `json:"content"`
-		Hidden   bool   `json:"hidden"`
-		MazeNode string `json:"maze_node"`
+		TokenID    string `json:"token_id"`
+		Path       string `json:"path"`
+		Content    string `json:"content"`
+		Hidden     bool   `json:"hidden"`
+		MazeNode   string `json:"maze_node"`
+		MatchValue string `json:"match_value"`
 	}
 	if err := json.Unmarshal(data, &tokens); err != nil {
 		return nil, fmt.Errorf("parse tokens.json: %w", err)
@@ -992,7 +1002,241 @@ func LoadLuresFromSeed(seedDir string) ([]Lure, error) {
 			MazeNode:    t.MazeNode,
 			Owner:       owner,
 			Hidden:      t.Hidden,
+			MatchValue:  t.MatchValue,
 		})
 	}
 	return lures, nil
+}
+
+func (s *Server) proxyToSandbox(ch ssh.Channel, reqs <-chan *ssh.Request, st *connState, cconn *countingConn, host string, connStart time.Time) bool {
+	if s.cfg.DockerSandboxAddr == "" {
+		return false
+	}
+	conn, err := net.DialTimeout("tcp", s.cfg.DockerSandboxAddr, 2*time.Second)
+	if err != nil {
+		return false
+	}
+
+	clientConfig := &ssh.ClientConfig{
+		User: st.user.Name,
+		Auth: []ssh.AuthMethod{
+			ssh.Password("HalSummer2023!"),
+		},
+		HostKeyCallback: ssh.InsecureIgnoreHostKey(),
+		Timeout:         5 * time.Second,
+	}
+
+	cClientConn, chans, rReqs, err := ssh.NewClientConn(conn, s.cfg.DockerSandboxAddr, clientConfig)
+	if err != nil {
+		conn.Close()
+		return false
+	}
+	cClient := ssh.NewClient(cClientConn, chans, rReqs)
+	defer cClient.Close()
+
+	cSession, err := cClient.NewSession()
+	if err != nil {
+		return false
+	}
+	defer cSession.Close()
+
+	sStdin, err := cSession.StdinPipe()
+	if err != nil {
+		return false
+	}
+	sStdout, err := cSession.StdoutPipe()
+	if err != nil {
+		return false
+	}
+	sStderr, err := cSession.StderrPipe()
+	if err != nil {
+		return false
+	}
+
+	var lastCmdTime = time.Now()
+	emitCmd := func(raw string) {
+		raw = strings.TrimSpace(raw)
+		if raw == "" {
+			return
+		}
+		parts := strings.Fields(raw)
+		argv0 := parts[0]
+		var args []string
+		if len(parts) > 1 {
+			args = parts[1:]
+		}
+		sincePrev := time.Since(lastCmdTime).Milliseconds()
+		lastCmdTime = time.Now()
+
+		timing := &event.Timing{
+			SincePrevMS: sincePrev,
+			Keystrokes:  len(raw),
+		}
+		slog.Info("shell command captured", "raw", raw, "session", st.session.ID)
+		st.session.Event("shell.command", mazeNode, shellCommandData{
+			Raw:   raw,
+			Argv0: argv0,
+			Args:  args,
+			Cwd:   st.user.Home,
+			Exit:  0,
+		}, timing, nil)
+	}
+
+	go func() {
+		for req := range reqs {
+			switch req.Type {
+			case "pty-req":
+				term := "xterm-256color"
+				if len(req.Payload) >= 4 {
+					tLen := int(req.Payload[3])
+					if len(req.Payload) >= 4+tLen {
+						term = string(req.Payload[4 : 4+tLen])
+					}
+				}
+				_ = cSession.RequestPty(term, 80, 24, ssh.TerminalModes{
+					ssh.ECHO:          1,
+					ssh.TTY_OP_ISPEED: 14400,
+					ssh.TTY_OP_OSPEED: 14400,
+				})
+				if req.WantReply {
+					req.Reply(true, nil)
+				}
+			case "shell":
+				_ = cSession.Shell()
+				if req.WantReply {
+					req.Reply(true, nil)
+				}
+			case "window-change":
+				if len(req.Payload) >= 8 {
+					w := int(binary.BigEndian.Uint32(req.Payload[0:4]))
+					h := int(binary.BigEndian.Uint32(req.Payload[4:8]))
+					_ = cSession.WindowChange(h, w)
+				}
+				if req.WantReply {
+					req.Reply(true, nil)
+				}
+			case "exec":
+				cmd := ""
+				if len(req.Payload) >= 4 {
+					l := int(binary.BigEndian.Uint32(req.Payload[0:4]))
+					if l > 0 && len(req.Payload) >= 4+l {
+						cmd = string(req.Payload[4 : 4+l])
+					}
+				}
+				if cmd != "" {
+					emitCmd(cmd)
+				}
+				_ = cSession.Start(cmd)
+				if req.WantReply {
+					req.Reply(true, nil)
+				}
+			default:
+				if req.WantReply {
+					req.Reply(false, nil)
+				}
+			}
+		}
+	}()
+
+	var triggerMu sync.Mutex
+	triggered := map[string]bool{}
+	emitToken := func(tokenID, pth, mNode string) {
+		triggerMu.Lock()
+		defer triggerMu.Unlock()
+		if triggered[tokenID] {
+			return
+		}
+		triggered[tokenID] = true
+		tokRef := tokenID
+		if mNode == "" {
+			mNode = mazeNode
+		}
+		slog.Info("lure token access captured", "token", tokenID, "path", pth, "mazeNode", mNode)
+		st.session.Event("file.read", mNode, fileReadData{
+			Path:        pth,
+			HoneyfileID: &tokRef,
+			Bytes:       len(tokenID),
+		}, nil, []string{tokenID})
+	}
+
+	var wg sync.WaitGroup
+	wg.Add(2)
+
+	editor := NewLineEditor("")
+	for _, l := range s.cfg.Lures {
+		if strings.HasSuffix(l.Path, ".bash_history") {
+			for _, line := range strings.Split(l.Content, "\n") {
+				line = strings.TrimSpace(line)
+				if line != "" {
+					editor.AddHistory(line)
+				}
+			}
+		}
+	}
+
+	go func() {
+		defer sStdin.Close()
+		buf := make([]byte, 1024)
+		for {
+			n, err := ch.Read(buf)
+			if n > 0 {
+				chunk := buf[:n]
+				_, lines := editor.Feed(chunk)
+				for _, line := range lines {
+					if line.Cancel || line.EOF {
+						continue
+					}
+					cmd := strings.TrimSpace(line.Text)
+					if cmd != "" {
+						emitCmd(cmd)
+						editor.AddHistory(cmd)
+					}
+				}
+				_, _ = sStdin.Write(chunk)
+			}
+			if err != nil {
+				return
+			}
+		}
+	}()
+
+	go func() {
+		defer wg.Done()
+		buf := make([]byte, 4096)
+		var matchWindow string
+		for {
+			n, err := sStdout.Read(buf)
+			if n > 0 {
+				chunk := buf[:n]
+				matchWindow += string(chunk)
+				if len(matchWindow) > 16384 {
+					matchWindow = matchWindow[len(matchWindow)-8192:]
+				}
+				for _, lure := range s.cfg.Lures {
+					val := lure.MatchValue
+					if val == "" && lure.HoneyfileID != "" {
+						val = lure.HoneyfileID
+					}
+					if val != "" && strings.Contains(matchWindow, val) {
+						emitToken(lure.HoneyfileID, lure.Path, lure.MazeNode)
+					}
+				}
+				_, _ = ch.Write(chunk)
+			}
+			if err != nil {
+				return
+			}
+		}
+	}()
+
+	go func() {
+		defer wg.Done()
+		_, _ = io.Copy(ch.Stderr(), sStderr)
+	}()
+
+	_ = cSession.Wait()
+	wg.Wait()
+
+	st.emitClose(int(time.Since(connStart).Milliseconds()), cconn.bytesIn.Load(), cconn.bytesOut.Load(), "clean")
+	return true
 }
