@@ -29,7 +29,8 @@ func Open(ctx context.Context, url string) (*Store, error) {
 	if err != nil {
 		return nil, fmt.Errorf("parse DATABASE_URL: %w", err)
 	}
-	cfg.MaxConns = 16
+	cfg.MaxConns = 32 // engine workers (12) + API + ingest; Neon pooler allows far more
+	cfg.ConnConfig.Tracer = queryCounter{}
 	pool, err := pgxpool.NewWithConfig(ctx, cfg)
 	if err != nil {
 		return nil, err

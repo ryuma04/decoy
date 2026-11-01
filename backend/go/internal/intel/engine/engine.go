@@ -9,8 +9,11 @@ import (
 	"fmt"
 	"hash/fnv"
 	"log/slog"
+	"os"
 	"strings"
 	"sync"
+	"sync/atomic"
+	"time"
 
 	"github.com/ryuma04/decoy/backend/internal/bus"
 	"github.com/ryuma04/decoy/backend/internal/dto"
@@ -25,7 +28,7 @@ import (
 	"github.com/ryuma04/decoy/backend/internal/store"
 )
 
-const workers = 4
+const workers = 12 // events are sharded by session; more workers = more sessions analysed in parallel
 
 // Features supplies rolling per-session / per-actor features (07 §3, §7) to session- and actor-scope rules.
 // Not built yet (docs/17 row 5); with nil, only event-scope rules fire.
@@ -97,10 +100,18 @@ func (e *Engine) safeProcess(ctx context.Context, ev store.StoredEvent) {
 			slog.Error("intel panic", "event_id", ev.EventID, "panic", r)
 		}
 	}()
-	if err := e.Process(ctx, ev); err != nil {
+	var queries atomic.Int64
+	start := time.Now()
+	if err := e.Process(store.WithQueryCounter(ctx, &queries), ev); err != nil {
 		slog.Error("intel failed", "event_id", ev.EventID, "err", err)
 	}
+	if traceEngine {
+		slog.Info("engine event", "type", ev.Type, "ms", time.Since(start).Milliseconds(), "db_queries", queries.Load())
+	}
 }
+
+// traceEngine (ENGINE_TRACE=1) logs per-event processing time and database round trips.
+var traceEngine = os.Getenv("ENGINE_TRACE") == "1"
 
 // Process runs the pipeline for one event.
 func (e *Engine) Process(ctx context.Context, ev store.StoredEvent) error {
@@ -136,7 +147,9 @@ func (e *Engine) Process(ctx context.Context, ev store.StoredEvent) error {
 	}
 	_ = e.Store.TouchActor(ctx, actorID, ev.TS)
 	if e.Features != nil && actorID != "" {
-		if assoc, ok := e.Features.(interface{ Associate(sessionID, actorID string) }); ok {
+		if assoc, ok := e.Features.(interface {
+			Associate(sessionID, actorID string)
+		}); ok {
 			assoc.Associate(ev.SessionID, actorID)
 		}
 	}
@@ -243,24 +256,40 @@ func (e *Engine) correlate(ctx context.Context, ev store.StoredEvent, current st
 	if err != nil {
 		return current, err
 	}
-	var results []correlate.Result
+	// Load every candidate actor's sessions and their fingerprints in two round trips (was one Session + one
+	// FingerprintsOf query per session: ~200 queries per event against actors with many sessions).
+	var others []string
 	for _, a := range cands {
-		if a == current {
-			continue
+		if a != current {
+			others = append(others, a)
 		}
-		sess, err := e.Store.SessionsOfActor(ctx, a)
-		if err != nil {
+	}
+	sess, err := e.Store.SessionsOfActors(ctx, others)
+	if err != nil {
+		return current, err
+	}
+	ids := make([]string, len(sess))
+	for i, s := range sess {
+		ids[i] = s.SessionID
+	}
+	var fps []store.Fingerprint
+	if len(ids) > 0 {
+		if fps, err = e.Store.FingerprintsOf(ctx, ids); err != nil {
 			return current, err
 		}
-		sigs := make([]correlate.Session, 0, len(sess))
-		for _, s := range sess {
-			sig, err := e.sessionSig(ctx, s.SessionID)
-			if err != nil {
-				return current, err
-			}
-			sigs = append(sigs, sig)
-		}
-		results = append(results, correlate.Score(me, a, sigs))
+	}
+	bySession := map[string][]store.Fingerprint{}
+	for _, f := range fps {
+		bySession[f.SessionID] = append(bySession[f.SessionID], f)
+	}
+	sigsByActor := map[string][]correlate.Session{}
+	for _, s := range sess {
+		a := deref(s.ActorID)
+		sigsByActor[a] = append(sigsByActor[a], sigFromRow(s, bySession[s.SessionID]))
+	}
+	var results []correlate.Result
+	for _, a := range others { // same order as before: CandidateActors' order
+		results = append(results, correlate.Score(me, a, sigsByActor[a]))
 	}
 	d := correlate.Decide(results)
 	switch {
@@ -328,13 +357,18 @@ func (e *Engine) sessionSig(ctx context.Context, sessionID string) (correlate.Se
 	if err != nil {
 		return correlate.Session{}, err
 	}
+	fps, err := e.Store.FingerprintsOf(ctx, []string{sessionID})
+	if err != nil {
+		return correlate.Session{}, err
+	}
+	return sigFromRow(s, fps), nil
+}
+
+// sigFromRow builds the correlation view of one session from its row and its fingerprints.
+func sigFromRow(s store.SessionRow, fps []store.Fingerprint) correlate.Session {
 	sig := correlate.Session{ID: s.SessionID, ActorID: deref(s.ActorID), Service: s.Service, IP: s.SrcIP, Start: s.StartedAt}
 	if s.EndedAt != nil {
 		sig.End = *s.EndedAt
-	}
-	fps, err := e.Store.FingerprintsOf(ctx, []string{sessionID})
-	if err != nil {
-		return sig, err
 	}
 	for _, f := range fps {
 		switch f.Kind {
@@ -358,7 +392,7 @@ func (e *Engine) sessionSig(ctx context.Context, sessionID string) (correlate.Se
 			sig.Shingles = decodeSig(f.Value) // latest one wins (sorted by value is fine: any is a valid estimate)
 		}
 	}
-	return sig, nil
+	return sig
 }
 
 func (e *Engine) addFinding(ctx context.Context, ev store.StoredEvent, actorID string, m rules.Match, ml *dto.FindingML) (store.FindingRow, bool, error) {

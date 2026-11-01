@@ -9,9 +9,9 @@
 | family_holdout.attack_recall_at_0.5 | 0.846 | >= 0.8 | yes |
 | hard_set_holdout_model.attack_recall_at_0.5 | 0.976 | >= 0.95 | yes |
 | hard_set_holdout_model.macro_f1 | 0.950 | >= 0.8 | yes |
-| latency.p95_ms | 1.080 | <= 30.0 | yes |
+| latency.p95_ms | 1.980 | <= 30.0 | yes |
 
-Latency per call: p50 0.89 ms, p95 1.08 ms
+Latency per call: p50 1.32 ms, p95 1.98 ms
 
 ## Held-out template families
 

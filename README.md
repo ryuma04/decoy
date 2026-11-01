@@ -148,4 +148,5 @@ Manual tests for every feature, with expected results: [19-run-and-test](docs/19
 | [19-run-and-test](docs/19-run-and-test.md) | Run locally and test every feature by hand |
 | [20-live-bait-deployment](docs/20-live-bait-deployment.md) | Putting the proxy in front of aeteesbakehouse.com |
 | [21-bait-audit](docs/21-bait-audit.md) | Audit of the live Linux host |
+| [22-system-audit](docs/22-system-audit.md) | Full system audit: what works, what was broken, what is open |
 | [decisions](docs/decisions.md) | Running log of design decisions |

@@ -73,7 +73,8 @@ if [ -d ".lab/aetees" ] && [ -f "backend/go/bin/divert-proxy.exe" ]; then
 fi
 
 echo "[5/5] dashboard :$DASHBOARD_PORT"
-(cd frontend/nextjs && { [ -d node_modules ] || npm install --no-audit --no-fund; } \
+# reinstall when package-lock.json changed since the last install (a pulled commit may add a dependency)
+(cd frontend/nextjs && { [ node_modules/.package-lock.json -nt package-lock.json ] || npm install --no-audit --no-fund; } \
   && exec nohup npx next dev -H 127.0.0.1 -p "$DASHBOARD_PORT") > .logs/dashboard.log 2>&1 < /dev/null &
 track $! dashboard
 wait_for dashboard "http://127.0.0.1:$DASHBOARD_PORT/login"

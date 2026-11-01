@@ -51,6 +51,14 @@ func (s *Store) SessionsOfActor(ctx context.Context, actorID string) ([]SessionR
 	return s.querySessions(ctx, `SELECT `+sessionCols+` FROM sessions WHERE actor_id::text = $1 ORDER BY started_at`, actorID)
 }
 
+// SessionsOfActors loads the sessions of several actors in one round trip (correlation compares against all of them).
+func (s *Store) SessionsOfActors(ctx context.Context, actorIDs []string) ([]SessionRow, error) {
+	if len(actorIDs) == 0 {
+		return nil, nil
+	}
+	return s.querySessions(ctx, `SELECT `+sessionCols+` FROM sessions WHERE actor_id::text = ANY($1) ORDER BY started_at`, actorIDs)
+}
+
 func (s *Store) querySessions(ctx context.Context, q string, args ...any) ([]SessionRow, error) {
 	rows, err := s.Pool.Query(ctx, q, args...)
 	if err != nil {
