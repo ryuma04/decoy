@@ -63,6 +63,7 @@ type Visitor struct {
 	AnalystRelease time.Time // when this visitor first saw the current analyst release of its IP
 	ReleaseRev     int64     // policy revision of that release (a new click on Release changes it)
 	TacticsEmitted map[string]bool
+	Held           []HeldAction // soft-divert write requests recorded for replay on release (heldqueue.go)
 
 	LastSeen   time.Time
 	CookieSeen bool // the client sent our visitor cookie back (a browser), so it is never merged by IP+UA
@@ -85,6 +86,7 @@ type SessionReleasedData struct {
 	Reason        string `json:"reason"`
 	CleanRequests int    `json:"clean_requests,omitempty"`
 	Seconds       int    `json:"seconds,omitempty"`
+	HeldReplayed  int    `json:"held_replayed,omitempty"` // held contact messages now being delivered to the real shop
 }
 
 // SessionDivertedData is the event payload for session.diverted.

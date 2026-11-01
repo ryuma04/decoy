@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"encoding/json"
 	"io"
+	"log/slog"
 	"net/http"
 	"net/url"
 	"os"
@@ -82,14 +83,17 @@ func (rm *RecoveryManager) CheckAutoRelease(v *Visitor) bool {
 			secs = 0
 		}
 
+		held := takeHeldLocked(v)
 		if v.Session != nil {
 			v.Session.Event("session.released", "", SessionReleasedData{
 				Reason:        "auto: clean behaviour",
 				CleanRequests: v.CleanReqs,
 				Seconds:       secs,
+				HeldReplayed:  len(held),
 			}, nil, nil)
-			v.Session = nil
 		}
+		rm.startReplay(v.IP, held, v.Session)
+		v.Session = nil
 		return true
 	}
 	return false
@@ -101,6 +105,10 @@ func (rm *RecoveryManager) UpgradeToHard(v *Visitor, reason, label string) {
 	defer v.mu.Unlock()
 
 	if v.Diverted && v.Severity == SevSoft {
+		if n := len(v.Held); n > 0 {
+			slog.Info("held actions discarded: visitor turned hard", "visitor", v.ID, "count", n)
+			v.Held = nil // never replay an attacker's requests on the real shop
+		}
 		v.Severity = SevHard
 		v.Reason = reason
 		v.Label = label
@@ -124,19 +132,23 @@ func (rm *RecoveryManager) CheckHoldWrites(w http.ResponseWriter, r *http.Reques
 		return false
 	}
 
-	// Emit http.request event with held: true
-	if sess != nil {
-		sess.Event("http.request", "", map[string]any{
-			"method":      r.Method,
-			"path":        path,
-			"query":       r.URL.RawQuery,
-			"status":      http.StatusServiceUnavailable,
-			"ua":          r.UserAgent(),
-			"body_sample": bodySample(r, body),
-			"held":        true,
-		}, nil, nil)
+	if rm.queueHeld(v, r, body) {
+		// recorded for replay on release: answer exactly like the real shop's contact endpoint
+		if sess != nil {
+			sess.Event("http.request", "", map[string]any{"method": r.Method, "path": path, "status": http.StatusOK,
+				"ua": r.UserAgent(), "body_sample": bodySample(r, body), "held": true, "queued": true}, nil, nil)
+		}
+		w.Header().Set("Content-Type", "application/json")
+		w.WriteHeader(http.StatusOK)
+		_, _ = w.Write([]byte(`{"success":true}`))
+		return true
 	}
 
+	// not replayable (checkout: payment needs the customer) or could not be recorded: ask them to try again
+	if sess != nil {
+		sess.Event("http.request", "", map[string]any{"method": r.Method, "path": path, "status": http.StatusServiceUnavailable,
+			"ua": r.UserAgent(), "body_sample": bodySample(r, body), "held": true}, nil, nil)
+	}
 	w.Header().Set("Content-Type", "application/json")
 	w.WriteHeader(http.StatusServiceUnavailable)
 	resp := HeldErrorResponse{
@@ -170,13 +182,16 @@ func (rm *RecoveryManager) CheckVerifiedAdmin(w http.ResponseWriter, r *http.Req
 	v.Diverted = false
 	v.Severity = SevNone
 	v.Reason = "verified real admin login"
+	held := takeHeldLocked(v)
 	v.mu.Unlock()
 
 	if sess != nil {
 		sess.Event("session.released", "", SessionReleasedData{
-			Reason: "verified real admin login",
+			Reason:       "verified real admin login",
+			HeldReplayed: len(held),
 		}, nil, nil)
 	}
+	rm.startReplay(v.IP, held, sess)
 
 	writeUpstream(w, r, resp, respBody)
 	return true
@@ -262,12 +277,15 @@ func (rm *RecoveryManager) CheckAnalystRelease(v *Visitor, kit *sensorkit.Kit) b
 		v.Diverted = false
 		v.Severity = SevNone
 		v.Reason = "analyst"
+		held := takeHeldLocked(v)
 		if v.Session != nil {
 			v.Session.Event("session.released", "", SessionReleasedData{
-				Reason: "analyst",
+				Reason:       "analyst",
+				HeldReplayed: len(held),
 			}, nil, nil)
-			v.Session = nil
 		}
+		rm.startReplay(v.IP, held, v.Session)
+		v.Session = nil
 		return true
 	}
 	return false
