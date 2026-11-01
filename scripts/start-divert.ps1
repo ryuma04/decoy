@@ -13,3 +13,4 @@ $env:CLONE_URL = "http://127.0.0.1:3101"
 $env:CORE_URL = "http://127.0.0.1:8443"
 $env:DATA_DIR = "$RootDir\.data\aetees"
 & "$RootDir\backend\go\bin\divert-proxy.exe"
+
