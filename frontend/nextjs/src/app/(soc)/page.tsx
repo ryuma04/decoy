@@ -9,6 +9,8 @@ import type { Event, Overview, Severity, TechniqueCount, TimeseriesPoint } from 
 import { KpiCard } from "@/components/KpiCard";
 import { ServiceIcon } from "@/components/ServiceIcon";
 import { EventDrawer } from "@/components/EventDrawer";
+import { SeverityPill } from "@/components/SeverityPill";
+import { getEventSeverity } from "@/lib/event-risk";
 import {
   Activity,
   AlertTriangle,
@@ -305,6 +307,7 @@ export default function OverviewPage() {
                   className="py-2.5 px-1 hover:bg-canvas rounded cursor-pointer transition-colors flex items-center justify-between gap-3 text-[12px]"
                 >
                   <div className="flex items-center gap-2 truncate">
+                    <SeverityPill severity={getEventSeverity(ev)} size="sm" />
                     <ServiceIcon service={ev.service} className="h-3.5 w-3.5 shrink-0" />
                     <span className="font-mono font-semibold text-ink shrink-0">{ev.src_ip}</span>
                     <span className="text-body truncate font-mono text-[11px]">{ev.summary}</span>

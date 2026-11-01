@@ -3,6 +3,8 @@ import type { Event, Narrative } from "@/lib/types";
 import { api } from "@/lib/api";
 import { ago, istFull } from "@/lib/format";
 import { ServiceIcon } from "@/components/ServiceIcon";
+import { SeverityPill } from "@/components/SeverityPill";
+import { getEventSeverity } from "@/lib/event-risk";
 import { X, Sparkles, Loader2, ShieldAlert } from "@/components/icons";
 
 interface Props {
@@ -43,6 +45,8 @@ export function EventDrawer({ event, onClose }: Props) {
     data: event.data,
   };
 
+  const severity = getEventSeverity(event);
+
   return (
     <div className="fixed inset-0 z-50 flex justify-end bg-black/30 backdrop-blur-xs animate-in fade-in" onClick={onClose}>
       <aside
@@ -53,9 +57,10 @@ export function EventDrawer({ event, onClose }: Props) {
           <div className="flex items-center gap-2">
             <ServiceIcon service={event.service} className="h-4 w-4" />
             <span className="font-mono text-[13px] font-semibold text-ink">{event.type}</span>
+            <SeverityPill severity={severity} size="sm" />
             {event.origin === "production" && (
-              <span className="rounded-full bg-red-100 px-2 py-0.5 text-[11px] font-mono font-medium text-red-800">
-                Production
+              <span className="rounded-full bg-red-100 px-2 py-0.5 text-[11px] font-mono font-bold text-red-800">
+                PROD ACCESS
               </span>
             )}
           </div>
@@ -168,7 +173,7 @@ export function EventDrawer({ event, onClose }: Props) {
                 {event.tokens.map((tok) => (
                   <span
                     key={tok}
-                    className="rounded bg-rose-50 border border-rose-200 px-2 py-0.5 text-[11px] font-mono text-rose-700"
+                    className="rounded bg-rose-50 border border-rose-200 px-2 py-0.5 text-[11px] font-mono font-bold text-rose-700"
                   >
                     {tok}
                   </span>

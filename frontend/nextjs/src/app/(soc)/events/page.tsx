@@ -1,14 +1,16 @@
 "use client";
 
 import { useSearchParams } from "next/navigation";
-import { useCallback, useEffect, useState, Suspense } from "react";
+import { useCallback, useEffect, useState, useMemo, Suspense } from "react";
 import { api } from "@/lib/api";
 import { ago, istTime } from "@/lib/format";
 import { useStream } from "@/lib/stream";
-import type { Event } from "@/lib/types";
+import type { Event, Severity } from "@/lib/types";
 import { ServiceIcon } from "@/components/ServiceIcon";
+import { SeverityPill } from "@/components/SeverityPill";
 import { EventDrawer } from "@/components/EventDrawer";
-import { Search, RefreshCw } from "@/components/icons";
+import { Search, RefreshCw, AlertTriangle, ArrowUpDown } from "@/components/icons";
+import { getEventSeverity, getEventRiskScore } from "@/lib/event-risk";
 
 export default function EventsPageWrapper() {
   return (
@@ -29,6 +31,8 @@ function EventsPage() {
   const [service, setService] = useState(searchParams.get("service") ?? "");
   const [actor, setActor] = useState(searchParams.get("actor_id") ?? "");
   const [ip, setIp] = useState(searchParams.get("src_ip") ?? "");
+  const [severityFilter, setSeverityFilter] = useState<string>("");
+  const [sortByRisk, setSortByRisk] = useState<boolean>(false);
 
   const loadEvents = useCallback(async () => {
     setLoading(true);
@@ -60,24 +64,58 @@ function EventsPage() {
     setEvents((prev) => [ev, ...prev]);
   });
 
+  // Filter and sort events based on risk / severity
+  const displayedEvents = useMemo(() => {
+    let list = events;
+    if (severityFilter) {
+      list = list.filter((ev) => getEventSeverity(ev) === severityFilter);
+    }
+    if (sortByRisk) {
+      return [...list].sort((a, b) => getEventRiskScore(b) - getEventRiskScore(a));
+    }
+    return list;
+  }, [events, severityFilter, sortByRisk]);
+
+  const criticalCount = useMemo(() => {
+    return events.filter((ev) => getEventSeverity(ev) === "critical").length;
+  }, [events]);
+
   return (
     <div className="space-y-6">
       <div className="flex flex-wrap items-center justify-between gap-4">
         <div>
-          <h1 className="text-[28px] font-semibold tracking-tight text-ink">Live Telemetry Events</h1>
+          <div className="flex items-center gap-2.5">
+            <h1 className="text-[28px] font-semibold tracking-tight text-ink">Live Telemetry Events</h1>
+            {criticalCount > 0 && (
+              <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full bg-rose-50 text-rose-700 border border-rose-200 text-[11px] font-mono font-bold animate-pulse">
+                <AlertTriangle className="h-3 w-3" />
+                {criticalCount} Critical
+              </span>
+            )}
+          </div>
           <p className="mt-1 text-body text-[13px]">
-            Raw decoy interaction telemetry and production telemetry links, sorted newest first.
+            Real-time decoy telemetry and production alerts, classified and leveled by active threat risk.
           </p>
         </div>
-        <button onClick={loadEvents} className="btn text-[13px] gap-1.5" disabled={loading}>
-          <RefreshCw className={`h-3.5 w-3.5 ${loading ? "animate-spin" : ""}`} />
-          <span>Refresh</span>
-        </button>
+        <div className="flex items-center gap-2">
+          <button
+            onClick={() => setSortByRisk(!sortByRisk)}
+            className={`btn text-[13px] gap-1.5 ${sortByRisk ? "border-ink bg-canvas font-semibold" : ""}`}
+            title="Sort by highest risk score first"
+          >
+            <ArrowUpDown className="h-3.5 w-3.5" />
+            <span>{sortByRisk ? "Sorted by Risk" : "Sort by Risk"}</span>
+          </button>
+          <button onClick={loadEvents} className="btn text-[13px] gap-1.5" disabled={loading}>
+            <RefreshCw className={`h-3.5 w-3.5 ${loading ? "animate-spin" : ""}`} />
+            <span>Refresh</span>
+          </button>
+        </div>
       </div>
 
       {/* Filter Bar */}
       <div className="card p-4">
-        <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-4 gap-3">
+        <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-5 gap-3">
           <div className="relative">
             <Search className="absolute left-3 top-2.5 h-3.5 w-3.5 text-mute" />
             <input
@@ -88,6 +126,18 @@ function EventsPage() {
               className="h-8.5 w-full rounded-[6px] border border-hairline bg-canvas pl-9 pr-3 text-[12px] font-mono text-ink placeholder:text-mute focus:outline-none focus:ring-2 focus:ring-link"
             />
           </div>
+
+          <select
+            value={severityFilter}
+            onChange={(e) => setSeverityFilter(e.target.value)}
+            className="h-8.5 rounded-[6px] border border-hairline bg-canvas px-3 text-[12px] font-mono text-ink focus:outline-none focus:ring-2 focus:ring-link"
+          >
+            <option value="">All Severities</option>
+            <option value="critical">Critical Risk Only</option>
+            <option value="high">High Risk Only</option>
+            <option value="medium">Medium Risk Only</option>
+            <option value="low">Low Risk Only</option>
+          </select>
 
           <select
             value={service}
@@ -127,6 +177,7 @@ function EventsPage() {
           <table className="w-full text-left text-[13px]">
             <thead className="border-b border-hairline bg-canvas text-[11px] font-mono uppercase text-mute">
               <tr>
+                <th className="px-4 py-3">Severity</th>
                 <th className="px-4 py-3">Time (IST)</th>
                 <th className="px-4 py-3">Service</th>
                 <th className="px-4 py-3">Type</th>
@@ -137,25 +188,33 @@ function EventsPage() {
               </tr>
             </thead>
             <tbody className="divide-y divide-hairline font-mono text-[12px]">
-              {events.length === 0 ? (
+              {displayedEvents.length === 0 ? (
                 <tr>
-                  <td colSpan={7} className="px-4 py-8 text-center text-mute italic">
+                  <td colSpan={8} className="px-4 py-8 text-center text-mute italic">
                     {loading ? "Loading events..." : "No matching decoy events found."}
                   </td>
                 </tr>
               ) : (
-                events.map((ev) => {
+                displayedEvents.map((ev) => {
                   const isProd = ev.origin === "production";
+                  const sev: Severity = getEventSeverity(ev);
+                  const isCritical = sev === "critical";
+
                   return (
                     <tr
                       key={ev.event_id}
                       onClick={() => setSelectedEvent(ev)}
                       className={`cursor-pointer transition-colors ${
-                        isProd
+                        isCritical
+                          ? "bg-rose-50/40 hover:bg-rose-50/70 dark:bg-rose-950/20"
+                          : isProd
                           ? "bg-red-50/30 hover:bg-red-50/60"
                           : "hover:bg-canvas/80"
                       }`}
                     >
+                      <td className="px-4 py-3 whitespace-nowrap">
+                        <SeverityPill severity={sev} size="sm" />
+                      </td>
                       <td className="px-4 py-3 text-mute whitespace-nowrap" title={ev.ts}>
                         {istTime(ev.ts)} ({ago(ev.ts)})
                       </td>
@@ -183,7 +242,7 @@ function EventsPage() {
                           <span className="text-mute">—</span>
                         )}
                       </td>
-                      <td className="px-4 py-3 max-w-[420px] truncate text-ink">
+                      <td className="px-4 py-3 max-w-[380px] truncate text-ink">
                         {ev.summary}
                       </td>
                       <td className="px-4 py-3 whitespace-nowrap">
