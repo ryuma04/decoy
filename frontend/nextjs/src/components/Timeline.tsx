@@ -2,7 +2,7 @@ import React, { useState } from "react";
 import type { TimelineItem } from "@/lib/types";
 import { ago, istTime } from "@/lib/format";
 import { ServiceIcon } from "@/components/ServiceIcon";
-import { AlertCircle, Compass, Shield, Terminal, ArrowUpRight } from "lucide-react";
+import { AlertCircle, Compass, Shield, Terminal, ArrowUpRight } from "@/components/icons";
 
 interface Props {
   items: TimelineItem[];

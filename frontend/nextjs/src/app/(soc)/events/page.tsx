@@ -8,7 +8,7 @@ import { useStream } from "@/lib/stream";
 import type { Event } from "@/lib/types";
 import { ServiceIcon } from "@/components/ServiceIcon";
 import { EventDrawer } from "@/components/EventDrawer";
-import { Search, RefreshCw } from "lucide-react";
+import { Search, RefreshCw } from "@/components/icons";
 
 export default function EventsPageWrapper() {
   return (

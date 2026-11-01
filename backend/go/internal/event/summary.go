@@ -76,7 +76,11 @@ func Summary(typ string, d map[string]any) string {
 			out += " (error " + e + ")"
 		}
 	case "session.diverted":
-		out = "visitor diverted to the honeypot clone: " + s("reason")
+		if shadow, _ := d["shadow"].(bool); shadow {
+			out = "would divert (shadow mode, visitor kept on the real site): " + s("reason")
+		} else {
+			out = "visitor diverted to the honeypot clone: " + s("reason")
+		}
 	case "session.released":
 		out = "visitor released back to the real site: " + s("reason")
 	default:

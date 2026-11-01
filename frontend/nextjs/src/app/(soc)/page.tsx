@@ -5,11 +5,8 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import { api } from "@/lib/api";
 import { useStream } from "@/lib/stream";
 import { ago, istTime } from "@/lib/format";
-import type { Event, Overview, TechniqueCount, TimeseriesPoint } from "@/lib/types";
+import type { Event, Overview, Severity, TechniqueCount, TimeseriesPoint } from "@/lib/types";
 import { KpiCard } from "@/components/KpiCard";
-import { RiskGauge } from "@/components/RiskGauge";
-import { SeverityPill } from "@/components/SeverityPill";
-import { BehaviourBadge } from "@/components/BehaviourBadge";
 import { ServiceIcon } from "@/components/ServiceIcon";
 import { EventDrawer } from "@/components/EventDrawer";
 import {
@@ -21,7 +18,7 @@ import {
   Radio,
   Server,
   Users,
-} from "lucide-react";
+} from "@/components/icons";
 import {
   AreaChart,
   Area,
@@ -156,62 +153,62 @@ export default function OverviewPage() {
       {/* Main Grid: Highest Risk Actor + Timeseries */}
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
         {/* Highest Risk Actor Banner */}
-        <div className="card p-5 lg:col-span-1 flex flex-col justify-between">
-          <div>
-            <div className="flex items-center justify-between border-b border-hairline pb-3">
-              <span className="eyebrow">Priority Threat Actor</span>
-              {topActor && <SeverityPill severity={topActor.severity} size="sm" />}
-            </div>
-
-            {topActor ? (
-              <div className="mt-4 flex flex-col items-center text-center">
-                <RiskGauge score={topActor.risk_score} size={96} />
-                <h3 className="mt-3 font-mono text-[20px] font-bold text-ink">
-                  {topActor.label}
-                </h3>
-                <div className="mt-2 flex flex-wrap justify-center gap-1.5">
-                  <BehaviourBadge behaviourClass={topActor.behaviour_class} size="sm" />
-                  {topActor.touched_production && (
-                    <span className="rounded-full bg-red-100 text-red-800 border border-red-200 px-2 py-0.5 text-[10px] font-mono font-bold">
-                      Touched Production
-                    </span>
-                  )}
-                </div>
-
-                <div className="mt-4 w-full grid grid-cols-2 gap-2 text-left font-mono text-[11px] bg-canvas p-3 rounded-lg border border-hairline">
-                  <div>
-                    <span className="text-mute block">Sessions</span>
-                    <span className="text-ink font-semibold">{topActor.session_count} decoys</span>
-                  </div>
-                  <div>
-                    <span className="text-mute block">Confidence</span>
-                    <span className="text-ink font-semibold">{(topActor.confidence * 100).toFixed(0)}% match</span>
-                  </div>
-                  <div>
-                    <span className="text-mute block">Token Hits</span>
-                    <span className="text-ink font-semibold">{topActor.token_hits}</span>
-                  </div>
-                  <div>
-                    <span className="text-mute block">Maze Depth</span>
-                    <span className="text-ink font-semibold">{topActor.maze_depth} lures</span>
-                  </div>
-                </div>
-              </div>
-            ) : (
-              <div className="py-12 text-center text-mute text-[13px] italic">
-                No active threats detected.
-              </div>
-            )}
+        <div className="card lg:col-span-1 flex flex-col">
+          <div className="flex items-center justify-between border-b border-hairline px-4 py-2.5">
+            <span className="text-[12px] font-semibold uppercase tracking-wide text-body">Highest-risk actor</span>
+            {topActor && <span className="font-mono text-[11px] text-mute">seen {ago(topActor.last_seen)}</span>}
           </div>
 
-          {topActor && (
-            <Link
-              href={`/actors/${topActor.actor_id}`}
-              className="btn btn-primary mt-4 w-full justify-center gap-2"
-            >
-              <span>Inspect Actor Dossier</span>
-              <ArrowRight className="h-4 w-4" />
-            </Link>
+          {topActor ? (
+            <div className="flex flex-1 flex-col px-4 py-3">
+              <div className="flex items-baseline justify-between">
+                <Link href={`/actors/${topActor.actor_id}`} className="font-mono text-[18px] font-semibold text-ink hover:underline">
+                  {topActor.label}
+                </Link>
+                <span className="font-mono text-[13px]">
+                  <span className="font-semibold text-ink">{topActor.risk_score}</span>
+                  <span className="text-mute">/100 </span>
+                  <span className={`uppercase font-semibold ${sevText(topActor.severity)}`}>{topActor.severity}</span>
+                </span>
+              </div>
+              <RiskBar score={topActor.risk_score} severity={topActor.severity} />
+
+              <dl className="mt-3 divide-y divide-hairline-soft border-y border-hairline-soft text-[12px]">
+                <Row k="Stage" v={topActor.kill_chain_stage.replaceAll("_", " ")} />
+                <Row k="Behaviour" v={topActor.behaviour_class.replaceAll("_", "-")} />
+                <Row
+                  k="Services"
+                  v={
+                    <span className="flex flex-wrap justify-end gap-2">
+                      {topActor.services.map((s) => (
+                        <span key={s} className="inline-flex items-center gap-1">
+                          <ServiceIcon service={s} className="h-3.5 w-3.5 text-mute" />
+                          {s}
+                        </span>
+                      ))}
+                    </span>
+                  }
+                />
+                <Row
+                  k="Source IPs"
+                  v={topActor.ips.length > 2 ? `${topActor.ips.slice(0, 2).join(", ")} +${topActor.ips.length - 2}` : topActor.ips.join(", ") || "—"}
+                  mono
+                />
+                <Row k="ATT&CK" v={topActor.top_techniques.slice(0, 4).join(" · ") || "—"} mono />
+                <Row k="Honeytokens / maze" v={`${topActor.token_hits} hits · depth ${topActor.maze_depth}`} mono />
+                <Row k="Sessions" v={`${topActor.session_count} · ${(topActor.confidence * 100).toFixed(0)}% linked`} mono />
+                {topActor.touched_production && <Row k="Production" v={<span className="font-semibold text-error">touched</span>} />}
+              </dl>
+
+              <Link
+                href={`/actors/${topActor.actor_id}`}
+                className="mt-auto pt-3 inline-flex items-center gap-1 self-start text-[12px] font-medium text-link hover:underline"
+              >
+                Open {topActor.label} <ArrowRight className="h-3.5 w-3.5" />
+              </Link>
+            </div>
+          ) : (
+            <div className="px-4 py-10 text-[13px] text-mute">No actor above low risk yet.</div>
           )}
         </div>
 
@@ -390,4 +387,33 @@ function sensorSubtitle(ok?: number, total?: number): string {
   if (total === 0) return "No sensors registered";
   if (ok === total) return "All decoys reporting";
   return `${total - ok} not reporting (no heartbeat in 90 s)`;
+}
+
+// ---- highest-risk actor card helpers ----
+
+function Row({ k, v, mono = false }: { k: string; v: React.ReactNode; mono?: boolean }) {
+  return (
+    <div className="flex items-start justify-between gap-4 py-1.5">
+      <dt className="shrink-0 text-mute">{k}</dt>
+      <dd className={`text-right text-ink ${mono ? "font-mono text-[11px]" : ""}`}>{v}</dd>
+    </div>
+  );
+}
+
+const SEV_BAR: Record<Severity, string> = { low: "bg-faint", medium: "bg-warning", high: "bg-orange-600", critical: "bg-error" };
+
+function sevText(s: Severity): string {
+  return { low: "text-mute", medium: "text-warning-deep", high: "text-orange-700", critical: "text-error" }[s];
+}
+
+/** 20 flat segments, one per 5 risk points: reads like a meter on a console, not a decorative gauge. */
+function RiskBar({ score, severity }: { score: number; severity: Severity }) {
+  const filled = Math.round(Math.max(0, Math.min(100, score)) / 5);
+  return (
+    <div className="mt-2 flex gap-[2px]" aria-label={`risk ${score} of 100`}>
+      {Array.from({ length: 20 }, (_, i) => (
+        <span key={i} className={`h-1.5 flex-1 ${i < filled ? SEV_BAR[severity] : "bg-hairline"}`} />
+      ))}
+    </div>
+  );
 }

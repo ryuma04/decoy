@@ -156,6 +156,31 @@ requests (contact messages with `--`, `;`, quotes, `#1234`, emoji, an address, a
 proxy, each as a fresh visitor, and checks core for `session.diverted`. Expected: `20 passed, 0 failed` (input-risk
 model v2; v1 failed 2 harmless messages).
 
+## Live domain (Cloudflare Tunnel -> divert proxy)
+
+Prerequisite: the domain's DNS must be on Cloudflare (nameservers changed at the registrar) and each hostname
+routed to the tunnel (`cloudflared tunnel route dns aetee <hostname>`). While the nameservers are elsewhere
+(e.g. Hostinger `dns-parking.com`), public traffic never reaches this machine.
+
+Setup: `.env` with `AETEES_SRC`, `AETEES_REAL_URL=http://127.0.0.1:3000`, `PROXY_LISTEN=127.0.0.1:8200`,
+`TRUST_CLOUDFLARE=1`, `DIVERT_MODE=shadow`, `ADMIN_HONEYPOT_HOSTS=aeteesadmin.aeteesbakehouse.com`; then
+`scripts/dev-up.sh && scripts/aetees-lab.sh` (re-run dev-up once after the first lab build so the proxy starts).
+`~/.cloudflared/config.yml`: every shop hostname -> `http://127.0.0.1:8200`; the dashboard is never in the tunnel.
+
+From an outside network (phone hotspot):
+
+| Test | Expected |
+| --- | --- |
+| Browse `https://aeteesbakehouse.com` normally | real shop, no SOC events |
+| `/.env.bak`, `/.git/config`, `/wp-login.php`, `?q=<script>`, `?id=1 UNION SELECT`, `sqlmap` UA | real shop's own answer; Live Events: "would divert (shadow mode …)" with the phone's public IP |
+| `https://aeteesadmin.aeteesbakehouse.com` | clone admin login; `session.diverted` "admin subdomain" |
+| 3 wrong admin passwords, then a 4th | 401 ×3, then "Logged in" to synthetic orders (`false_success`); passwords shown as `[redacted]` |
+| Owner's real password on the admin host | real admin on the same URL; only `session.released` "verified staff login", nothing after |
+| Logout, open admin again | clone login again |
+
+Same tests without the domain: send requests to `http://127.0.0.1:8200` with `Host:`, `CF-Connecting-IP:` and
+`X-Forwarded-Proto: https` headers (what cloudflared sends).
+
 ## Clean slate before a demo
 `scripts/reset-demo.sh` is a dry run: it lists how many rows each table holds and changes nothing.
 `scripts/reset-demo.sh -yes` deletes all recorded activity (events, sessions, actors, findings, token hits, incidents,

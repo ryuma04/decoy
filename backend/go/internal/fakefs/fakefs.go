@@ -144,7 +144,20 @@ func (f *FS) Write(p, content, owner string, appendTo bool) bool {
 	if old := f.get(p); old != nil && old.Dir {
 		return false
 	}
-	n := &Node{Name: path.Base(p), Content: content, Mode: "-rw-rw-r--", Owner: owner, ModTime: time.Now()}
+	mode := "-rw-rw-r--"
+	honeyfileID := ""
+	mazeNode := ""
+	if old := f.get(p); old != nil {
+		if old.Mode != "" {
+			mode = old.Mode
+		}
+		if owner == "" {
+			owner = old.Owner
+		}
+		honeyfileID = old.HoneyfileID
+		mazeNode = old.MazeNode
+	}
+	n := &Node{Name: path.Base(p), Content: content, Mode: mode, Owner: owner, ModTime: time.Now(), HoneyfileID: honeyfileID, MazeNode: mazeNode}
 	if appendTo {
 		if old := f.get(p); old != nil {
 			n.Content = old.Content + content
@@ -180,5 +193,37 @@ func (f *FS) Remove(p string) bool {
 			delete(f.overlay, q)
 		}
 	}
+	return true
+}
+
+// Chmod sets the mode of a node in the session overlay.
+func (f *FS) Chmod(p, mode string) bool {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	n := f.get(p)
+	if n == nil {
+		return false
+	}
+	if _, ok := f.overlay[p]; !ok {
+		cp := *n
+		f.overlay[p] = &cp
+	}
+	f.overlay[p].Mode = mode
+	return true
+}
+
+// Chown sets the owner of a node in the session overlay.
+func (f *FS) Chown(p, owner string) bool {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	n := f.get(p)
+	if n == nil {
+		return false
+	}
+	if _, ok := f.overlay[p]; !ok {
+		cp := *n
+		f.overlay[p] = &cp
+	}
+	f.overlay[p].Owner = owner
 	return true
 }

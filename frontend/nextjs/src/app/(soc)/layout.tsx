@@ -20,7 +20,7 @@ import {
   Search,
   AlertTriangle,
   Shuffle,
-} from "lucide-react";
+} from "@/components/icons";
 
 export default function SocLayout({ children }: { children: React.ReactNode }) {
   return (

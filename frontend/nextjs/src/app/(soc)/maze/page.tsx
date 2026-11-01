@@ -5,7 +5,7 @@ import { api } from "@/lib/api";
 import { useStream } from "@/lib/stream";
 import type { ActorSummary, MazeGraph as MazeGraphType, MazeMessage } from "@/lib/types";
 import { MazeGraph } from "@/components/MazeGraph";
-import { Compass } from "lucide-react";
+import { Compass } from "@/components/icons";
 
 export default function GlobalMazePage() {
   const [globalMaze, setGlobalMaze] = useState<MazeGraphType | null>(null);

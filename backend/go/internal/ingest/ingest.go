@@ -200,7 +200,7 @@ func (s *Server) mazeView(w http.ResponseWriter, r *http.Request, _ string, _ []
 func ServiceFromID(id string) string {
 	prefix, _, _ := strings.Cut(id, "-")
 	switch prefix {
-	case "ssh", "web", "k8s", "beacon", "dbadmin":
+	case "ssh", "web", "db", "k8s", "beacon", "dbadmin":
 		return prefix
 	case "logs":
 		return "firewall"

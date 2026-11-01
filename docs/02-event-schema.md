@@ -60,7 +60,7 @@ Limits: envelope ≤ 64 KB; `data.raw` ≤ 4 KB (set `data.truncated: true` when
 | `http.request` | web, k8s, beacon | `method`, `path`, `query` (object), `body_sample` (≤1 KB), `status`, `ua` |
 | `k8s.api_call` | k8s | `verb` (`get`,`list`,`create`,`delete`,`watch`), `resource`, `namespace`, `name`, `authenticated` |
 | `db.query` | db | `query` (≤ 1000 chars), `database`, `user`, `kind` (`recon`,`read`,`write`,`admin`,`session`,`unknown`), `table` (if any), `rows`, `error` (SQLSTATE, if the decoy refused) |
-| `session.diverted` / `session.released` | web (divert proxy) | `reason`, `severity` (`soft`,`hard`), `label` |
+| `session.diverted` / `session.released` | web (divert proxy) | `reason`, `severity` (`soft`,`hard`), `label`; shadow mode adds `shadow: true` and `path` (visitor was NOT diverted, "would divert") |
 | `token.used` | any | `token_id`, `token_kind`, `via` (e.g. `aws_api`, `k8s_bearer`, `ssh_key`, `url_fetch`, `db_login`) |
 | `input.suspicious` | web | `param`, `value`, `separator` (e.g. `;`), `payload` (part after separator) — set by decoy's cheap pre-check, engine re-checks |
 | `scan.detected` | engine | `ports` (int[]), `window_s` |

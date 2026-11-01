@@ -5,7 +5,7 @@ import { api } from "@/lib/api";
 import { ago } from "@/lib/format";
 import type { ScorerState } from "@/lib/types";
 import { ConfirmDialog } from "@/components/ConfirmDialog";
-import { RotateCcw, CheckCircle2, XCircle } from "lucide-react";
+import { RotateCcw, CheckCircle2, XCircle } from "@/components/icons";
 import {
   BarChart,
   Bar,

@@ -1,6 +1,6 @@
 import React from "react";
 import type { Finding } from "@/lib/types";
-import { Sparkles, Terminal, Code, Cpu } from "lucide-react";
+import { Sparkles, Terminal, Code, Cpu } from "@/components/icons";
 
 interface Props {
   findings: Finding[];

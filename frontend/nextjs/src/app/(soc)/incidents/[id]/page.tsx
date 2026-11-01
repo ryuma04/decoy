@@ -20,7 +20,7 @@ import {
   CheckCircle2,
   XCircle,
   Send,
-} from "lucide-react";
+} from "@/components/icons";
 
 export default function IncidentDetailPage() {
   const params = useParams();

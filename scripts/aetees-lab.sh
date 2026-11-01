@@ -6,7 +6,13 @@
 # so no MySQL is needed; the client's repo itself is never modified.
 #   scripts/aetees-lab.sh          set up once (copy, schema, build, seed) and start both
 #   REBUILD=1 scripts/aetees-lab.sh   copy and rebuild from the source again
+#   AETEES_REAL_URL set (live shop already running elsewhere): only the clone :3101 is started.
+# Never copied into the lab: .env files (live payment/bot/DB secrets), SQL dumps, cookie jars, installers.
+# Only the shop's NEXT_PUBLIC_* values (already public in its browser bundle) are given to the build, so the
+# clone's pages look exactly like the real ones.
 set -euo pipefail
+ROOT_ENV="$(cd "$(dirname "$0")/.." && pwd)/.env"
+[ -f "$ROOT_ENV" ] && { set -a; . "$ROOT_ENV"; set +a; }
 ROOT="$(cd "$(dirname "$0")/.." && pwd)"
 cd "$ROOT"
 SRC="${AETEES_SRC:-$ROOT/../references/aetee}"
@@ -32,7 +38,12 @@ if [ "${REBUILD:-0}" = 1 ] || [ ! -f "$LAB/.next/BUILD_ID" ]; then
     MSYS_NO_PATHCONV=1 cmd.exe /c rmdir "$(cygpath -w "$LAB/node_modules")" 2>/dev/null || true
   fi
   rm -rf "$LAB/src" "$LAB/public" "$LAB/prisma" "$LAB/.next"; mkdir -p "$LAB"
-  (cd "$SRC" && tar --exclude=./node_modules --exclude=./.next --exclude=./.git --exclude='./*.msi' -cf - .) | (cd "$LAB" && tar -xf -)
+  (cd "$SRC" && tar --exclude=./node_modules --exclude=./.next --exclude=./.git --exclude='./*.msi' \
+    --exclude='.env' --exclude='.env.*' --exclude='*.sql' --exclude='*.sql.gz' --exclude='cookies.txt' \
+    --exclude='targets.txt' --exclude='./deploy' -cf - .) | (cd "$LAB" && tar -xf -)
+  find "$LAB" -path "$LAB/node_modules" -prune -o \( -name '.env' -o -name '.env.*' -o -name '*.sql' \) -print -exec rm -f {} + || true
+  # public build-time values only (Maps / Turnstile / Razorpay key id are already in the real site's JS)
+  [ -f "$SRC/.env" ] && grep -E '^NEXT_PUBLIC_[A-Z0-9_]*=' "$SRC/.env" > "$LAB/.env.production" || true
   # own copy of node_modules: the build refuses links that leave the project, and copying avoids re-downloading
   # Prisma engines. No source node_modules -> npm ci.
   echo "[aetees] node_modules"
@@ -69,9 +80,13 @@ start() { # name port db admin_password admin_secret
   (cd "$LAB" && DATABASE_URL="file:./$3.db" ADMIN_USERNAME=admin ADMIN_PASSWORD="$4" ADMIN_SECRET="$5" PORT="$2" \
     NODE_ENV=production NEXT_TELEMETRY_DISABLED=1 exec nohup npx next start -p "$2" -H 127.0.0.1) \
     > ".logs/aetees-$1.log" 2>&1 < /dev/null &
+  echo "$! aetees-$1" >> .logs/pids
 }
-start real 3100 real "$REAL_ADMIN_PASSWORD" "$REAL_ADMIN_SECRET"
+PORTS="3101"
+if [ -z "${AETEES_REAL_URL:-}" ]; then
+  start real 3100 real "$REAL_ADMIN_PASSWORD" "$REAL_ADMIN_SECRET"; PORTS="3100 3101"
+fi
 start clone 3101 clone "$ADMIN_TOKEN_PW" "$CLONE_ADMIN_SECRET"
-for p in 3100 3101; do
+for p in $PORTS; do
   for _ in $(seq 1 60); do curl -s -o /dev/null "http://127.0.0.1:$p/" && { echo "  aetees :$p up"; break; }; sleep 1; done
 done

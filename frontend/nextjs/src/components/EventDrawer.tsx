@@ -3,7 +3,7 @@ import type { Event, Narrative } from "@/lib/types";
 import { api } from "@/lib/api";
 import { ago, istFull } from "@/lib/format";
 import { ServiceIcon } from "@/components/ServiceIcon";
-import { X, Sparkles, Loader2, ShieldAlert } from "lucide-react";
+import { X, Sparkles, Loader2, ShieldAlert } from "@/components/icons";
 
 interface Props {
   event: Event | null;

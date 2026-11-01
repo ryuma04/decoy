@@ -6,7 +6,7 @@ import { api, HttpError } from "@/lib/api";
 import { ago } from "@/lib/format";
 import type { Diversion } from "@/lib/types";
 import { ConfirmDialog } from "@/components/ConfirmDialog";
-import { Shuffle, Undo2, ShieldCheck } from "lucide-react";
+import { Shuffle, Undo2, ShieldCheck } from "@/components/icons";
 
 type Pending = { ip: string; action: "divert" | "release" } | null;
 

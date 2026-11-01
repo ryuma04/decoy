@@ -5,7 +5,7 @@ import { api } from "@/lib/api";
 import { ago } from "@/lib/format";
 import type { Sensor } from "@/lib/types";
 import { ServiceIcon } from "@/components/ServiceIcon";
-import { CheckCircle2, AlertOctagon } from "lucide-react";
+import { CheckCircle2, AlertOctagon } from "@/components/icons";
 
 export default function SensorsPage() {
   const [sensors, setSensors] = useState<Sensor[]>([]);

@@ -126,17 +126,13 @@ func (rm *RecoveryManager) CheckHoldWrites(w http.ResponseWriter, r *http.Reques
 
 	// Emit http.request event with held: true
 	if sess != nil {
-		sample := string(body)
-		if len(sample) > 512 {
-			sample = sample[:512]
-		}
 		sess.Event("http.request", "", map[string]any{
 			"method":      r.Method,
 			"path":        path,
 			"query":       r.URL.RawQuery,
 			"status":      http.StatusServiceUnavailable,
 			"ua":          r.UserAgent(),
-			"body_sample": sample,
+			"body_sample": bodySample(r, body),
 			"held":        true,
 		}, nil, nil)
 	}
@@ -164,51 +160,7 @@ func (rm *RecoveryManager) CheckVerifiedAdmin(w http.ResponseWriter, r *http.Req
 		return false
 	}
 
-	if rm.cfg.RealURL == nil {
-		return false
-	}
-
-	// Prepare request to REAL upstream
-	realTarget := rm.cfg.RealURL.ResolveReference(r.URL)
-	req, err := http.NewRequestWithContext(r.Context(), http.MethodPost, realTarget.String(), bytes.NewReader(body))
-	if err != nil {
-		return false
-	}
-
-	for k, vv := range r.Header {
-		for _, val := range vv {
-			req.Header.Add(k, val)
-		}
-	}
-	req.Header.Set("X-Forwarded-For", v.IP)
-
-	resp, err := rm.cfg.HTTPClient.Do(req)
-	if err != nil {
-		return false
-	}
-	defer resp.Body.Close()
-
-	respBody, err := io.ReadAll(resp.Body)
-	if err != nil {
-		return false
-	}
-
-	// Verify if real upstream accepted
-	accepted := false
-	if resp.StatusCode == http.StatusOK || resp.StatusCode == http.StatusFound {
-		accepted = true
-		// Check for failure markers in JSON body
-		var jsonResp struct {
-			Success *bool  `json:"success"`
-			Error   string `json:"error"`
-		}
-		if err := json.Unmarshal(respBody, &jsonResp); err == nil {
-			if (jsonResp.Success != nil && !*jsonResp.Success) || jsonResp.Error != "" {
-				accepted = false
-			}
-		}
-	}
-
+	resp, respBody, accepted := rm.TryRealLogin(r, body, v.IP)
 	if !accepted {
 		return false
 	}
@@ -226,15 +178,66 @@ func (rm *RecoveryManager) CheckVerifiedAdmin(w http.ResponseWriter, r *http.Req
 		}, nil, nil)
 	}
 
-	// Return real response and cookies to the client
+	writeUpstream(w, r, resp, respBody)
+	return true
+}
+
+// TryRealLogin sends a copy of a login POST to the REAL shop and reports whether it accepted the credentials.
+// The copy carries the visitor's real IP, so the shop's own brute-force lockout applies to it. Neither the
+// request body nor the response is kept.
+func (rm *RecoveryManager) TryRealLogin(r *http.Request, body []byte, clientIP string) (*http.Response, []byte, bool) {
+	if rm.cfg.RealURL == nil {
+		return nil, nil, false
+	}
+	realTarget := rm.cfg.RealURL.ResolveReference(r.URL)
+	req, err := http.NewRequestWithContext(r.Context(), http.MethodPost, realTarget.String(), bytes.NewReader(body))
+	if err != nil {
+		return nil, nil, false
+	}
+	for k, vv := range r.Header {
+		for _, val := range vv {
+			req.Header.Add(k, val)
+		}
+	}
+	req.Host = r.Host
+	req.Header.Set("X-Forwarded-For", clientIP)
+
+	resp, err := rm.cfg.HTTPClient.Do(req)
+	if err != nil {
+		return nil, nil, false
+	}
+	defer resp.Body.Close()
+	respBody, err := io.ReadAll(io.LimitReader(resp.Body, 1<<20))
+	if err != nil {
+		return nil, nil, false
+	}
+	if resp.StatusCode != http.StatusOK && resp.StatusCode != http.StatusFound {
+		return resp, respBody, false
+	}
+	var jsonResp struct {
+		Success *bool  `json:"success"`
+		Error   string `json:"error"`
+	}
+	if err := json.Unmarshal(respBody, &jsonResp); err == nil {
+		if (jsonResp.Success != nil && !*jsonResp.Success) || jsonResp.Error != "" {
+			return resp, respBody, false
+		}
+	}
+	return resp, respBody, true
+}
+
+// writeUpstream relays a response fetched outside the reverse proxy (headers, status, body) to the visitor.
+func writeUpstream(w http.ResponseWriter, r *http.Request, resp *http.Response, body []byte) {
+	if !isSecureRequest(r) {
+		stripSecureCookies(resp.Header)
+	}
 	for k, vv := range resp.Header {
 		for _, val := range vv {
 			w.Header().Add(k, val)
 		}
 	}
 	w.WriteHeader(resp.StatusCode)
-	_, _ = w.Write(respBody)
-	return true
+	_, _ = w.Write(body)
 }
 
 // CheckAnalystRelease handles manual releases triggered by analysts from the dashboard.

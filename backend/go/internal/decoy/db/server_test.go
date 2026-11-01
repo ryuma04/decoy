@@ -141,3 +141,14 @@ func TestSplitStatements(t *testing.T) {
 		t.Fatalf("%q", got)
 	}
 }
+
+// TestAliasDatabaseAccepted: a database name advertised by a planted lure (Aliases) is accepted like the default,
+// and an unknown name is still refused.
+func TestAliasDatabaseAccepted(t *testing.T) {
+	s := New(Config{Persona: persona.Generate("test-seed"), DBPass: testPass, Aliases: []string{"aetees_prod"}})
+	for name, want := range map[string]bool{"orders": true, "aetees_prod": true, "postgres_prod": false} {
+		if got := s.knownDB(name); got != want {
+			t.Fatalf("knownDB(%q) = %v, want %v", name, got, want)
+		}
+	}
+}

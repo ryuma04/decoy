@@ -12,6 +12,7 @@ import (
 	"os"
 	"os/signal"
 	"path/filepath"
+	"strings"
 	"syscall"
 	"time"
 
@@ -108,15 +109,31 @@ func main() {
 	tacticsMgr := divert.NewTacticsManager(dataDir, mlURLStr, adminToken)
 	tripwire := divert.NewTripwire(mlclient.New(mlURLStr)) // input-risk model for values the cheap pre-check passes
 
+	mode := strings.ToLower(env("DIVERT_MODE", "shadow"))
+	if mode != "shadow" && mode != "live" {
+		slog.Error("DIVERT_MODE must be shadow or live", "got", mode)
+		os.Exit(1)
+	}
+	var adminHosts []string
+	for _, h := range strings.Split(os.Getenv("ADMIN_HONEYPOT_HOSTS"), ",") {
+		if h = strings.ToLower(strings.TrimSpace(h)); h != "" {
+			adminHosts = append(adminHosts, h)
+		}
+	}
+	trustCF := os.Getenv("TRUST_CLOUDFLARE") == "1" || strings.EqualFold(os.Getenv("TRUST_CLOUDFLARE"), "true")
+
 	proxyCfg := divert.ProxyConfig{
-		RealURL:    realURL,
-		CloneURL:   cloneURL,
-		Kit:        kit,
-		Classifier: tripwire,
-		Recovery:   recoveryMgr,
-		Lures:      lureMgr,
-		Tactics:    tacticsMgr,
-		Tokens:     tokens,
+		TrustCloudflare: trustCF,
+		Shadow:          mode == "shadow",
+		AdminHosts:      adminHosts,
+		RealURL:         realURL,
+		CloneURL:        cloneURL,
+		Kit:             kit,
+		Classifier:      tripwire,
+		Recovery:        recoveryMgr,
+		Lures:           lureMgr,
+		Tactics:         tacticsMgr,
+		Tokens:          tokens,
 	}
 
 	proxy, err := divert.NewProxy(proxyCfg)
@@ -138,7 +155,8 @@ func main() {
 	}
 
 	go func() {
-		slog.Info("divert proxy listening", "addr", listenAddr, "real", realURLStr, "clone", cloneURLStr)
+		slog.Info("divert proxy listening", "addr", listenAddr, "real", realURLStr, "clone", cloneURLStr,
+			"mode", mode, "admin_honeypot_hosts", adminHosts, "trust_cloudflare", trustCF)
 		if err := server.ListenAndServe(); err != nil && !errors.Is(err, http.ErrServerClosed) {
 			slog.Error("divert proxy failed", "err", err)
 			os.Exit(1)

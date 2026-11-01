@@ -30,16 +30,55 @@ type Result struct {
 	Logout       bool
 	Clear        bool
 	StdoutTokens []string
+	// SecretPrompt: the command asked for a password (sudo / su); the server shows this prompt with echo off
+	// and passes the next line to Shell.AnswerPassword instead of running it.
+	SecretPrompt string
 }
 
 // Shell emulates bash over a fake filesystem. Commands are Go functions; nothing real is ever run.
 type Shell struct {
-	FS      *fakefs.FS
-	P       persona.Persona
-	User    persona.User
-	Cwd     string
-	History func() []string
-	Started time.Time
+	FS          *fakefs.FS
+	P           persona.Persona
+	User        persona.User
+	Cwd         string
+	History     func() []string
+	Started     time.Time
+	Interactive bool // a pty shell (password prompts possible); false for `ssh host cmd`
+	pending     *pendingAuth
+}
+
+// pendingAuth is a password prompt waiting for input. Every answer fails: the decoy has no real privilege.
+type pendingAuth struct {
+	kind  string // "sudo" | "su"
+	tries int    // answers left
+}
+
+// PasswordPending reports whether the next input line is a password answer.
+func (sh *Shell) PasswordPending() bool { return sh.pending != nil }
+
+// AnswerPassword consumes one typed password. sudo allows 3 tries ("Sorry, try again."), su one.
+func (sh *Shell) AnswerPassword(_ string) Result {
+	p := sh.pending
+	if p == nil {
+		return Result{}
+	}
+	p.tries--
+	if p.kind == "su" {
+		sh.pending = nil
+		return Result{Output: "su: Authentication failure\n", Exit: 1, Argv0: "su"}
+	}
+	if p.tries > 0 {
+		return Result{Output: "Sorry, try again.\n", Exit: 1, Argv0: "sudo", SecretPrompt: sh.sudoPrompt()}
+	}
+	sh.pending = nil
+	return Result{Output: "sudo: 3 incorrect password attempts\n", Exit: 1, Argv0: "sudo"}
+}
+
+func (sh *Shell) sudoPrompt() string { return "[sudo] password for " + sh.User.Name + ": " }
+
+// CancelPassword aborts a pending password prompt.
+func (sh *Shell) CancelPassword() {
+	sh.pending = nil
 }
 
 type cmdFunc func(sh *Shell, args []string, stdin string, res *Result) (string, int)
@@ -64,6 +103,7 @@ func init() {
 		"exit":     func(_ *Shell, _ []string, _ string, r *Result) (string, int) { r.Logout = true; return "", 0 },
 		"logout":   func(_ *Shell, _ []string, _ string, r *Result) (string, int) { r.Logout = true; return "", 0 },
 	}
+	registerExtra(commands)
 }
 
 // Run executes one command line: `;`, `&&`, `||` and `|` are split and emulated in order.
@@ -86,7 +126,7 @@ func (sh *Shell) Run(line string) Result {
 				}
 			}
 		}
-		argv := tokenize(s.text)
+		argv := dropStderrRedirects(tokenize(s.text))
 		if len(argv) == 0 {
 			continue
 		}
@@ -368,6 +408,22 @@ func tokenize(s string) []string {
 	}
 	if inWord {
 		out = append(out, cur.String())
+	}
+	return out
+}
+
+// dropStderrRedirects removes `2>/dev/null`, `2>&1`, `2> file`, `&>file`: stderr is merged into the output anyway.
+func dropStderrRedirects(argv []string) []string {
+	out := argv[:0:0]
+	for i := 0; i < len(argv); i++ {
+		a := argv[i]
+		switch {
+		case a == "2>" || a == "2>>" || a == "&>":
+			i++ // skip the target word
+		case strings.HasPrefix(a, "2>") || strings.HasPrefix(a, "&>"):
+		default:
+			out = append(out, a)
+		}
 	}
 	return out
 }

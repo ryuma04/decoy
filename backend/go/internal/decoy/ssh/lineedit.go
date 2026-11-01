@@ -30,9 +30,49 @@ type LineEditor struct {
 
 	keystrokes, edits int
 	paste             bool
+	secret            bool // password prompt: nothing typed is echoed, no history or line editing
 }
 
 func NewLineEditor(prompt string) *LineEditor { return &LineEditor{prompt: prompt} }
+
+// SetSecret switches password input on or off (sudo / su prompts).
+func (e *LineEditor) SetSecret(on bool) { e.secret = on }
+
+// feedSecret reads a password: characters are kept but never echoed, Enter ends the line.
+func (e *LineEditor) feedSecret(data []byte) (string, []Line) {
+	var out strings.Builder
+	var lines []Line
+	for i := 0; i < len(data); i++ {
+		switch b := data[i]; b {
+		case '\r', '\n':
+			if b == '\n' && i > 0 && data[i-1] == '\r' {
+				continue
+			}
+			out.WriteString("\r\n")
+			lines = append(lines, e.submit())
+		case 0x7f, 0x08:
+			if e.cursor > 0 {
+				e.buf = e.buf[:len(e.buf)-1]
+				e.cursor--
+			}
+		case 0x03:
+			out.WriteString("^C\r\n")
+			e.reset()
+			lines = append(lines, Line{Cancel: true})
+		case 0x04:
+			if len(e.buf) == 0 {
+				lines = append(lines, Line{EOF: true})
+			}
+		default:
+			if b >= 0x20 && len(e.buf) < maxLine {
+				e.buf = append(e.buf, rune(b))
+				e.cursor++
+				e.keystrokes++
+			}
+		}
+	}
+	return out.String(), lines
+}
 
 func (e *LineEditor) SetPrompt(p string) { e.prompt = p }
 func (e *LineEditor) Prompt() string     { return e.prompt }
@@ -49,6 +89,9 @@ func (e *LineEditor) History() []string { return e.history }
 
 // Feed processes one read from the client. It returns the echo to write and any completed lines.
 func (e *LineEditor) Feed(data []byte) (echo string, lines []Line) {
+	if e.secret {
+		return e.feedSecret(data)
+	}
 	var out strings.Builder
 	printable := 0
 	for _, b := range data {

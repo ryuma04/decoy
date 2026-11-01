@@ -112,7 +112,9 @@ func TestDeliverSpoolReplayAndPolicy(t *testing.T) {
 	kit2.Start(ctx)
 	defer kit2.Close()
 	waitFor(t, "replay", func() bool { return core.count() == 3 })
-	if _, err := os.Stat(kit.spoolPath()); !os.IsNotExist(err) {
-		t.Fatal("spool not removed after replay")
-	}
+	// the spool is deleted just after the replayed batch is accepted, so wait for it rather than racing it
+	waitFor(t, "spool removed after replay", func() bool {
+		_, err := os.Stat(kit.spoolPath())
+		return os.IsNotExist(err)
+	})
 }

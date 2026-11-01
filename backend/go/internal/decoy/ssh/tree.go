@@ -48,6 +48,7 @@ func BaseTree(p persona.Persona, lures []Lure) map[string]*fakefs.Node {
 	add("/etc/passwd", "root", "", passwd.String())
 	add("/home/deploy/notes.txt", "deploy", "", fmt.Sprintf("deploy checklist for %s\n- pull latest release\n- restart app service\n- check /var/log/app.log\n", p.Company))
 	add("/var/log/app.log", "root", "", "2026-11-13T22:10:04Z INFO app started\n2026-11-13T22:10:05Z INFO connected to db\n")
+	fakefs.Add(base, "/root", fakefs.Node{Dir: true, Owner: "root", Mode: "drwx------"})
 	add("/root/.bashrc", "root", "-rw-------", "# root bashrc\n")
 
 	for _, l := range lures {

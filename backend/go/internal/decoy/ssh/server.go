@@ -441,7 +441,7 @@ func (s *Server) handleSession(ch ssh.Channel, reqs <-chan *ssh.Request, st *con
 
 	var editor *LineEditor
 	cmdCount := 0
-	prompt := s.makePrompt(st.user)
+	prompt := s.makePrompt(st.user, shell.Cwd)
 	lastOutputTime := time.Now()
 
 	var historyMu sync.Mutex
@@ -470,6 +470,7 @@ func (s *Server) handleSession(ch ssh.Channel, reqs <-chan *ssh.Request, st *con
 			if req.WantReply {
 				req.Reply(true, nil)
 			}
+			shell.Interactive = true
 			editor = NewLineEditor(prompt)
 			ch.Write([]byte(prompt))
 			s.shellLoop(ch, editor, shell, st, fs, cconn, host, &cmdCount, connStart, &lastOutputTime, &historyMu, &history)
@@ -497,13 +498,19 @@ func (s *Server) handleSession(ch ssh.Channel, reqs <-chan *ssh.Request, st *con
 	}
 }
 
-func (s *Server) makePrompt(u persona.User) string {
+func (s *Server) makePrompt(u persona.User, cwd string) string {
 	hostname := s.cfg.Persona.Hostname
 	suffix := "$"
 	if u.UID == 0 {
 		suffix = "#"
 	}
-	return fmt.Sprintf("%s@%s:~%s ", u.Name, hostname, suffix)
+	dir := cwd
+	if cwd == u.Home {
+		dir = "~"
+	} else if strings.HasPrefix(cwd, u.Home+"/") {
+		dir = "~" + strings.TrimPrefix(cwd, u.Home)
+	}
+	return fmt.Sprintf("%s@%s:%s%s ", u.Name, hostname, dir, suffix)
 }
 
 type readResult struct {
@@ -598,13 +605,38 @@ func (s *Server) shellLoop(ch ssh.Channel, editor *LineEditor, shell *Shell,
 					return
 				}
 				if line.Cancel {
-					ch.Write([]byte(editor.Prompt()))
+					if shell.PasswordPending() {
+						shell.CancelPassword()
+						editor.SetSecret(false)
+					}
+					prompt := s.makePrompt(shell.User, shell.Cwd)
+					editor.SetPrompt(prompt)
+					ch.Write([]byte(prompt))
+					continue
+				}
+
+				if shell.PasswordPending() {
+					ansRes := shell.AnswerPassword(line.Text)
+					if ansRes.Output != "" {
+						ch.Write([]byte(toCRLF(ansRes.Output)))
+					}
+					if ansRes.SecretPrompt != "" {
+						ch.Write([]byte(ansRes.SecretPrompt))
+						editor.SetSecret(true)
+					} else {
+						editor.SetSecret(false)
+						prompt := s.makePrompt(shell.User, shell.Cwd)
+						editor.SetPrompt(prompt)
+						ch.Write([]byte(prompt))
+					}
 					continue
 				}
 
 				text := strings.TrimSpace(line.Text)
 				if text == "" {
-					ch.Write([]byte(editor.Prompt()))
+					prompt := s.makePrompt(shell.User, shell.Cwd)
+					editor.SetPrompt(prompt)
+					ch.Write([]byte(prompt))
 					continue
 				}
 
@@ -675,9 +707,14 @@ func (s *Server) shellLoop(ch ssh.Channel, editor *LineEditor, shell *Shell,
 					return
 				}
 
-				prompt := s.makePrompt(shell.User)
-				editor.SetPrompt(prompt)
-				ch.Write([]byte(prompt))
+				if result.SecretPrompt != "" {
+					ch.Write([]byte(result.SecretPrompt))
+					editor.SetSecret(true)
+				} else {
+					prompt := s.makePrompt(shell.User, shell.Cwd)
+					editor.SetPrompt(prompt)
+					ch.Write([]byte(prompt))
+				}
 			}
 		}
 	}

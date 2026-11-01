@@ -128,6 +128,8 @@ func TestSummary(t *testing.T) {
 		"token":   {"token.used", map[string]any{"token_id": "tok_aws_k7", "via": "aws_api"}, "honeytoken tok_aws_k7 used via aws_api"},
 		"http":    {"http.request", map[string]any{"method": "GET", "path": "/robots.txt", "status": float64(200)}, "GET /robots.txt → 200"},
 		"real":    {"auth.app_success", map[string]any{"username": "deploy"}, "app login as deploy succeeded"},
+		"divert":  {"session.diverted", map[string]any{"reason": "lure path"}, "visitor diverted to the honeypot clone: lure path"},
+		"shadow":  {"session.diverted", map[string]any{"reason": "lure path", "shadow": true}, "would divert (shadow mode, visitor kept on the real site): lure path"},
 	}
 	for name, c := range cases {
 		if got := Summary(c.typ, c.data); got != c.want {

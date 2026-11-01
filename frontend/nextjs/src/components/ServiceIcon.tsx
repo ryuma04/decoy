@@ -1,6 +1,6 @@
 import React from "react";
 import type { Service } from "@/lib/types";
-import { Terminal, Globe, Database, Boxes, Radio, Cpu, ShieldAlert, KeyRound, Lock } from "lucide-react";
+import { Terminal, Globe, Database, Boxes, Radio, Cpu, ShieldAlert, KeyRound, Lock } from "@/components/icons";
 
 interface Props {
   service: Service | string;

@@ -137,3 +137,12 @@ func TestHeartbeatAndPolicy(t *testing.T) {
 		t.Fatalf("policy %d %s", w.Code, w.Body)
 	}
 }
+
+func TestServiceFromID(t *testing.T) {
+	for id, want := range map[string]string{"ssh-01": "ssh", "web-01": "web", "db-01": "db", "k8s-01": "k8s",
+		"beacon-01": "beacon", "dbadmin-01": "dbadmin", "logs-01": "firewall", "engine": "engine"} {
+		if got := ServiceFromID(id); got != want {
+			t.Errorf("ServiceFromID(%q) = %q, want %q", id, got, want)
+		}
+	}
+}

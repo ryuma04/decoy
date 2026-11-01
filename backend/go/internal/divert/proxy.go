@@ -1,10 +1,11 @@
 package divert
 
 import (
-	"encoding/json"
 	"bytes"
+	"context"
 	"crypto/rand"
 	"encoding/hex"
+	"encoding/json"
 	"fmt"
 	"io"
 	"log/slog"
@@ -36,6 +37,14 @@ type ProxyConfig struct {
 	Lures      *LureManager
 	Tactics    *TacticsManager
 	Tokens     map[string]Honeytoken
+
+	// TrustCloudflare: requests from a loopback peer (cloudflared) carry the visitor's real IP in
+	// CF-Connecting-IP and its scheme in X-Forwarded-Proto. Never trusted from any other peer.
+	TrustCloudflare bool
+	// Shadow: on every host except AdminHosts, detect and report ("would divert") but never divert.
+	Shadow bool
+	// AdminHosts are always live: unknown visitors get the clone, verified staff get the real shop.
+	AdminHosts []string
 }
 
 // Proxy implements same-URL diversion between real and clone upstreams (docs/18 Task 9).
@@ -45,7 +54,14 @@ type Proxy struct {
 	cloneProxy *httputil.ReverseProxy
 	mu         sync.RWMutex
 	visitors   map[string]*Visitor
+	cookieless map[string]string // cookielessKey -> visitor ID
+	lastEvict  time.Time
 }
+
+const visitorCtxKey ctxKey = 2
+
+// visitorIdleTTL: a visitor unseen this long is forgotten (a returning one simply starts fresh).
+const visitorIdleTTL = 24 * time.Hour
 
 // NewProxy builds the divert reverse proxy.
 func NewProxy(cfg ProxyConfig) (*Proxy, error) {
@@ -84,8 +100,9 @@ func NewProxy(cfg ProxyConfig) (*Proxy, error) {
 	}
 
 	p := &Proxy{
-		cfg:      cfg,
-		visitors: make(map[string]*Visitor),
+		cfg:        cfg,
+		visitors:   make(map[string]*Visitor),
+		cookieless: make(map[string]string),
 	}
 
 	p.realProxy = httputil.NewSingleHostReverseProxy(cfg.RealURL)
@@ -108,6 +125,10 @@ func (p *Proxy) setupProxyDirector(rp *httputil.ReverseProxy, target *url.URL, i
 		if isClone {
 			req.Header.Set("Accept-Encoding", "identity")
 		}
+		// Both shops listen on loopback only (next start -H 127.0.0.1); told "https" they proxy their own
+		// middleware rewrites (aeteesadmin /dashboard -> /admin/dashboard) to https://<loopback> and 500. They get
+		// plain HTTP, and secureUpstreamRedirect turns their absolute redirects back into https URLs.
+		req.Header.Del("X-Forwarded-Proto")
 		clientIP, _ := parseRemoteAddr(req.RemoteAddr)
 		if isClone && req.Header.Get(falseSuccessHeader) != "" {
 			// false_success: a fresh client identity, so the clone's own login lockout (filled by the attacker's
@@ -123,11 +144,13 @@ func (p *Proxy) setupResponseModifiers() {
 	p.realProxy.ModifyResponse = func(resp *http.Response) error {
 		p.recordResponseStats(resp)
 		insecureCookiesOnHTTP(resp)
+		secureUpstreamRedirect(resp)
 		return nil
 	}
 	p.cloneProxy.ModifyResponse = func(resp *http.Response) error {
 		p.recordResponseStats(resp)
 		insecureCookiesOnHTTP(resp)
+		secureUpstreamRedirect(resp)
 		p.handleCloneResponse(resp)
 		return nil
 	}
@@ -136,25 +159,12 @@ func (p *Proxy) setupResponseModifiers() {
 // insecureCookiesOnHTTP: the shops run as production builds and mark cookies Secure. When the visitor reached the
 // proxy over plain HTTP (the lab), a browser would drop those cookies and nobody could log in, so the flag is removed
 // for both upstreams alike. Behind TLS (production) cookies pass through unchanged.
+// Behind Cloudflare (TrustCloudflare + X-Forwarded-Proto: https) the visitor is on HTTPS and nothing is changed.
 func insecureCookiesOnHTTP(resp *http.Response) {
-	if resp.Request == nil || resp.Request.TLS != nil {
+	if resp.Request == nil || isSecureRequest(resp.Request) {
 		return
 	}
-	cs := resp.Header.Values("Set-Cookie")
-	if len(cs) == 0 {
-		return
-	}
-	resp.Header.Del("Set-Cookie")
-	for _, c := range cs {
-		parts := strings.Split(c, ";")
-		kept := parts[:1]
-		for _, a := range parts[1:] {
-			if !strings.EqualFold(strings.TrimSpace(a), "secure") {
-				kept = append(kept, a)
-			}
-		}
-		resp.Header.Add("Set-Cookie", strings.Join(kept, ";"))
-	}
+	stripSecureCookies(resp.Header)
 }
 
 func (p *Proxy) handleCloneResponse(resp *http.Response) {
@@ -232,7 +242,7 @@ func (p *Proxy) recordResponseStats(resp *http.Response) {
 }
 
 func (p *Proxy) ServeHTTP(w http.ResponseWriter, r *http.Request) {
-	clientIP, clientPort := parseRemoteAddr(r.RemoteAddr)
+	r, clientIP, clientPort, secure := p.withEdge(r)
 
 	// 1. Kit Blocked check
 	if p.cfg.Kit != nil && p.cfg.Kit.Blocked(clientIP) {
@@ -242,12 +252,14 @@ func (p *Proxy) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 
 	// 2. Identify or initialize visitor + assign persistent cookie
 	v, visitorKey, isNewCookie := p.getOrCreateVisitor(r, clientIP)
+	r = r.WithContext(context.WithValue(r.Context(), visitorCtxKey, v)) // response hooks find the same visitor
 	if isNewCookie {
 		http.SetCookie(w, &http.Cookie{
 			Name:     VisitorCookieName,
 			Value:    visitorKey,
 			Path:     "/",
 			HttpOnly: true,
+			Secure:   secure,
 			SameSite: http.SameSiteLaxMode,
 		})
 	}
@@ -264,6 +276,15 @@ func (p *Proxy) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		slog.Info("visitor released by analyst", "ip", clientIP, "visitor", v.ID)
 	}
 
+	adminHost := p.isAdminHost(r)
+	if p.cfg.Shadow && !adminHost {
+		p.serveShadow(w, r, v, body, clientIP, clientPort)
+		return
+	}
+	if adminHost && p.staffPassthrough(w, r, v, body) {
+		return
+	}
+
 	// 4. Core policy divert check
 	if p.cfg.Kit != nil && p.cfg.Kit.Diverted(clientIP) && !p.cfg.Kit.Released(clientIP) {
 		v.mu.Lock()
@@ -274,7 +295,8 @@ func (p *Proxy) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	}
 
 	// 5. Honeytoken detection in body or URL
-	if ht, matched := p.checkHoneytokens(r, body); matched {
+	ht, tokenHit := p.checkHoneytokens(r, body)
+	if tokenHit {
 		v.mu.Lock()
 		if v.Diverted { // already in the clone: keep the same session (one timeline), just make it hard
 			v.Severity = SevHard
@@ -293,6 +315,19 @@ func (p *Proxy) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 				"via":        "request_content",
 			}, nil, []string{ht.TokenID})
 		}
+	}
+
+	// 5b. Admin honeypot host: every unknown visitor starts in the clone; a login the real shop accepts makes the
+	// visitor staff (never for a honeytoken password: that one belongs to the clone).
+	if adminHost {
+		if !tokenHit && p.verifyStaffLogin(w, r, v, body, clientIP) {
+			return
+		}
+		v.mu.Lock()
+		if !v.Diverted && !analystProtected(v) {
+			p.divertLocked(v, SevHard, adminSubdomainWhy, "admin_subdomain", clientIP, clientPort)
+		}
+		v.mu.Unlock()
 	}
 
 	// 6. Recovery logic for soft-diverted visitors
@@ -445,11 +480,17 @@ func (p *Proxy) checkHoneytokens(r *http.Request, body []byte) (Honeytoken, bool
 	return Honeytoken{}, false
 }
 
+// quietPoll: a plain GET of a timer endpoint (QueueGuard, every 30 s) that tripped nothing says nothing about the
+// visitor; recording it buries the attacker's real steps in the live feed. Anything carrying a payload is recorded.
+func quietPoll(r *http.Request, trip Trip) bool {
+	return r.Method == http.MethodGet && isBackgroundPoll(r.URL.Path) && (trip.Sev == "" || trip.Sev == SevNone)
+}
+
 func (p *Proxy) emitDivertedMonitoring(sess *sensorkit.Session, r *http.Request, body []byte, trip Trip, status int) {
-	sample := string(body)
-	if len(sample) > 512 {
-		sample = sample[:512]
+	if quietPoll(r, trip) {
+		return
 	}
+	sample := bodySample(r, body)
 	query := map[string]any{} // object, as 02 specifies: core grades each value with the input-risk model
 	for k, vs := range r.URL.Query() {
 		if len(vs) == 1 {
@@ -507,7 +548,9 @@ func (s *statusRecorder) Flush() {
 }
 
 func (p *Proxy) getVisitor(r *http.Request) (*Visitor, string, bool) {
-	clientIP, _ := parseRemoteAddr(r.RemoteAddr)
+	if v, ok := r.Context().Value(visitorCtxKey).(*Visitor); ok && v != nil {
+		return v, v.ID, false
+	}
 	if cookie, err := r.Cookie(VisitorCookieName); err == nil && cookie.Value != "" {
 		p.mu.RLock()
 		v, ok := p.visitors[cookie.Value]
@@ -517,52 +560,90 @@ func (p *Proxy) getVisitor(r *http.Request) (*Visitor, string, bool) {
 		}
 		return nil, cookie.Value, false
 	}
-
-	// Fallback key: IP + User-Agent
-	key := fmt.Sprintf("%s:%s", clientIP, r.UserAgent())
+	clientIP, _ := parseRemoteAddr(r.RemoteAddr)
+	key := cookielessKey(clientIP, r.UserAgent())
 	p.mu.RLock()
-	v := p.visitors[key]
-	p.mu.RUnlock()
-	return v, key, false
+	defer p.mu.RUnlock()
+	if id, ok := p.cookieless[key]; ok {
+		return p.visitors[id], id, false
+	}
+	return nil, key, false
 }
 
+// cookielessKey groups clients that never send our visitor cookie back (scanners, curl, scripts) by IP and
+// User-Agent, so their 404s, failed logins and request rate add up as one visitor.
+func cookielessKey(ip, ua string) string { return ip + "|" + ua }
+
 func (p *Proxy) getOrCreateVisitor(r *http.Request, clientIP string) (*Visitor, string, bool) {
+	now := time.Now()
+	touch := func(v *Visitor, cookieSeen bool) {
+		v.mu.Lock()
+		v.LastSeen = now
+		if cookieSeen {
+			v.CookieSeen = true
+		}
+		if countsAsPageRequest(r.URL.Path) { // a page load fetches dozens of assets; only pages/API count
+			v.RequestTimes = recentTimes(append(v.RequestTimes, now), time.Minute)
+		}
+		v.mu.Unlock()
+	}
+	p.mu.Lock()
+	defer p.mu.Unlock()
+	p.evictLocked(now)
+
 	if cookie, err := r.Cookie(VisitorCookieName); err == nil && cookie.Value != "" {
-		p.mu.Lock()
-		defer p.mu.Unlock()
 		if v, ok := p.visitors[cookie.Value]; ok {
-			if countsAsPageRequest(r.URL.Path) { // a page load fetches dozens of assets; only pages/API count
-				v.mu.Lock()
-				v.RequestTimes = recentTimes(append(v.RequestTimes, time.Now()), time.Minute)
-				v.mu.Unlock()
-			}
+			touch(v, true)
 			return v, cookie.Value, false
 		}
-		v := &Visitor{
-			ID:           cookie.Value,
-			IP:           clientIP,
-			UA:           r.UserAgent(),
-			RequestTimes: []time.Time{time.Now()},
-		}
+		v := &Visitor{ID: cookie.Value, IP: clientIP, UA: r.UserAgent(), RequestTimes: []time.Time{now}, LastSeen: now, CookieSeen: true}
 		p.visitors[cookie.Value] = v
 		return v, cookie.Value, false
 	}
 
-	// Create random cookie for first response
+	// No cookie: the same cookie-less client (same IP + UA, never sent our cookie back) stays one visitor.
+	// A browser returns the cookie on its next request, so two shoppers behind one NAT are never merged.
+	key := cookielessKey(clientIP, r.UserAgent())
+	if id, ok := p.cookieless[key]; ok {
+		if v, ok := p.visitors[id]; ok {
+			v.mu.Lock()
+			seen := v.CookieSeen
+			v.mu.Unlock()
+			if !seen {
+				touch(v, false)
+				return v, id, true
+			}
+		}
+	}
+
 	b := make([]byte, 8)
 	_, _ = rand.Read(b)
 	newKey := hex.EncodeToString(b)
-
-	p.mu.Lock()
-	defer p.mu.Unlock()
-	v := &Visitor{
-		ID:           newKey,
-		IP:           clientIP,
-		UA:           r.UserAgent(),
-		RequestTimes: []time.Time{time.Now()},
-	}
+	v := &Visitor{ID: newKey, IP: clientIP, UA: r.UserAgent(), RequestTimes: []time.Time{now}, LastSeen: now}
 	p.visitors[newKey] = v
+	p.cookieless[key] = newKey
 	return v, newKey, true
+}
+
+// evictLocked forgets visitors idle for visitorIdleTTL (bounded memory on a public site). Runs at most once a minute.
+func (p *Proxy) evictLocked(now time.Time) {
+	if now.Sub(p.lastEvict) < time.Minute {
+		return
+	}
+	p.lastEvict = now
+	for id, v := range p.visitors {
+		v.mu.Lock()
+		idle := now.Sub(v.LastSeen) > visitorIdleTTL
+		v.mu.Unlock()
+		if idle {
+			delete(p.visitors, id)
+		}
+	}
+	for k, id := range p.cookieless {
+		if _, ok := p.visitors[id]; !ok {
+			delete(p.cookieless, k)
+		}
+	}
 }
 
 func (p *Proxy) buildVisitorView(v *Visitor) VisitorView {
@@ -606,7 +687,9 @@ func (p *Proxy) buildVisitorView(v *Visitor) VisitorView {
 func countsAsPageRequest(path string) bool { return !isStaticAsset(path) }
 
 // isBackgroundPoll: requests the shop's own pages send on a timer while a tab is open.
-func isBackgroundPoll(path string) bool { return path == "/api/queue/validate" || path == "/api/queue/status" }
+func isBackgroundPoll(path string) bool {
+	return path == "/api/queue/validate" || path == "/api/queue/status"
+}
 
 // recentTimes keeps only the timestamps inside the window (bounded memory per visitor).
 func recentTimes(ts []time.Time, window time.Duration) []time.Time {

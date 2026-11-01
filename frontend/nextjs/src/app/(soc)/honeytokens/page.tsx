@@ -4,7 +4,7 @@ import { useEffect, useState } from "react";
 import { api } from "@/lib/api";
 import { ago, istTime } from "@/lib/format";
 import type { Honeytoken } from "@/lib/types";
-import { KeyRound, Flame, CheckCircle2 } from "lucide-react";
+import { KeyRound, Flame, CheckCircle2 } from "@/components/icons";
 
 export default function HoneytokensPage() {
   const [tokens, setTokens] = useState<Honeytoken[]>([]);

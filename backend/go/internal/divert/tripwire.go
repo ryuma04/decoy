@@ -266,9 +266,14 @@ func (tw *Tripwire) checkInjections(r *http.Request, body []byte) (Trip, bool) {
 			}
 		}
 
-		// Direct check on raw body
+		// Direct check on raw body. The ML contract (04 §C) only knows query|form|json|path|username for
+		// context.field; anything else is a 422, which used to read as "model down" and soft-divert.
 		bodyStr := string(body)
-		if trip, ok := tw.gradeParam("body", bodyStr, path, "body"); ok {
+		rawField := "form"
+		if isJSON {
+			rawField = "json"
+		}
+		if trip, ok := tw.gradeParam("body", bodyStr, path, rawField); ok {
 			return trip, true
 		}
 	}

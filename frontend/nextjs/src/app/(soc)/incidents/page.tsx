@@ -7,7 +7,7 @@ import { ago, istTime } from "@/lib/format";
 import { useStream } from "@/lib/stream";
 import type { Incident } from "@/lib/types";
 import { SeverityPill } from "@/components/SeverityPill";
-import { ArrowRight, Filter } from "lucide-react";
+import { ArrowRight, Filter } from "@/components/icons";
 
 export default function IncidentsPage() {
   const [incidents, setIncidents] = useState<Incident[]>([]);

@@ -11,7 +11,7 @@ import {
 } from "@xyflow/react";
 import "@xyflow/react/dist/style.css";
 import { ServiceIcon } from "@/components/ServiceIcon";
-import { Compass, Sparkles, CheckCircle2, Eye, EyeOff } from "lucide-react";
+import { Compass, Sparkles, CheckCircle2, Eye, EyeOff } from "@/components/icons";
 
 interface Props {
   graph: MazeGraphType;

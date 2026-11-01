@@ -9,7 +9,7 @@ import type { ActorSummary } from "@/lib/types";
 import { SeverityPill } from "@/components/SeverityPill";
 import { BehaviourBadge } from "@/components/BehaviourBadge";
 import { ServiceIcon } from "@/components/ServiceIcon";
-import { ArrowUpDown, ArrowRight } from "lucide-react";
+import { ArrowUpDown, ArrowRight } from "@/components/icons";
 
 export default function ActorsPage() {
   const [actors, setActors] = useState<ActorSummary[]>([]);

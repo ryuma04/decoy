@@ -10,6 +10,7 @@ import (
 	"os"
 	"os/signal"
 	"path/filepath"
+	"strings"
 	"syscall"
 
 	"github.com/ryuma04/decoy/backend/internal/config"
@@ -47,7 +48,14 @@ func main() {
 	kit.Start(ctx)
 	defer kit.Close()
 
-	srv := decoydb.New(decoydb.Config{Addr: cfg.Addr, Kit: kit, Persona: p, DBPass: tokens["tok_db"].MatchValue, DstPort: dstPort})
+	var aliases []string // DB_ALIASES: comma-separated database names that planted lures advertise
+	for _, a := range strings.Split(os.Getenv("DB_ALIASES"), ",") {
+		if a = strings.TrimSpace(a); a != "" {
+			aliases = append(aliases, a)
+		}
+	}
+	srv := decoydb.New(decoydb.Config{Addr: cfg.Addr, Kit: kit, Persona: p, DBPass: tokens["tok_db"].MatchValue, DstPort: dstPort,
+		Aliases: aliases})
 	slog.Info("starting db decoy", "addr", cfg.Addr, "sensor_id", cfg.SensorID, "company", p.Company)
 	if err := srv.ListenAndServe(ctx); err != nil {
 		slog.Error("db decoy stopped", "err", err)

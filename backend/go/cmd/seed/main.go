@@ -57,6 +57,7 @@ func tokens(p persona.Persona) map[string]Token {
 	bearer := randString(alnum, 48)
 	dbPass := randString(alnum, 18)
 	keyFP := "SHA256:" + randString(alnum, 43) // replaced by the real fingerprint when the deploy key is generated
+	tokURL := "/t/" + randString(hexdig, 16)
 	return map[string]Token{
 		"tok_backup_key": {TokenID: "tok_backup_key", Kind: "ssh_key", PlantedAt: "web:/admin/backup/internal-backup.zip",
 			MazeNode: "lure_backup", MatchValue: keyFP, Sensitivity: 4},
@@ -77,8 +78,8 @@ func tokens(p persona.Persona) map[string]Token {
 		"tok_aetees_invoice": {TokenID: "tok_aetees_invoice", Kind: "url", PlantedAt: "aetees:admin order note", MazeNode: "lure_aetees_orders",
 			MatchValue: "/invoices/view/" + randString(hexdig, 16), Sensitivity: 3},
 		"tok_url": {TokenID: "tok_url", Kind: "url", PlantedAt: "ssh:/home/deploy/.bash_history", MazeNode: "",
-			MatchValue: "/t/tok_url", Sensitivity: 2, Path: "/home/deploy/.bash_history",
-			Content: fmt.Sprintf("ls -la\ncd /opt/deploy\ncurl -s http://s3.%s:8088/t/tok_url -o status.json\nexit\n", p.Domain)},
+			MatchValue: tokURL, Sensitivity: 2, Path: "/home/deploy/.bash_history",
+			Content: fmt.Sprintf("ls -la\ncd /opt/deploy\ncurl -s http://s3.%s:8088%s -o status.json\nexit\n", p.Domain, tokURL)},
 	}
 }
 

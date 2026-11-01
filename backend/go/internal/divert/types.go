@@ -28,9 +28,9 @@ type Trip struct {
 
 // VisitorView provides request statistics for classification.
 type VisitorView struct {
-	NotFound5m     int `json:"not_found_5m"`
+	NotFound5m      int `json:"not_found_5m"`
 	FailedLogins10m int `json:"failed_logins_10m"`
-	RequestsPerMin int `json:"requests_per_min"`
+	RequestsPerMin  int `json:"requests_per_min"`
 }
 
 // Classifier inspects incoming requests and visitor statistics.
@@ -64,6 +64,16 @@ type Visitor struct {
 	ReleaseRev     int64     // policy revision of that release (a new click on Release changes it)
 	TacticsEmitted map[string]bool
 
+	LastSeen   time.Time
+	CookieSeen bool // the client sent our visitor cookie back (a browser), so it is never merged by IP+UA
+
+	// Admin honeypot host: the real shop accepted this visitor's login; StaffToken is the admin_token it set.
+	Staff      bool
+	StaffToken string
+	// Shadow mode: reasons already reported for this visitor, and its report session.
+	ShadowSeen    map[string]bool
+	ShadowSession *sensorkit.Session
+
 	// Counters for sliding window metrics
 	NotFoundTimes []time.Time
 	FailedLogins  []time.Time
@@ -89,4 +99,3 @@ type HeldErrorResponse struct {
 	Success bool   `json:"success"`
 	Error   string `json:"error"`
 }
-

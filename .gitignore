@@ -40,3 +40,4 @@ __pycache__/
 
 # Aetees lab copies (scripts/aetees-lab.sh) — client source, never commit
 .lab/
+cookies.txt

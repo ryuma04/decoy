@@ -709,3 +709,50 @@ func TestTripwire_MLClientIntegration(t *testing.T) {
 		t.Errorf("expected Hard sqli from fallback precheck on non-free-text param, got Sev: %s, Label: %s", tripFallback.Sev, tripFallback.Label)
 	}
 }
+
+// TestTripwire_RawBodyUsesContractField: a raw (unparseable) body must be sent to the ML service with a
+// context.field the contract allows (04 §C); the real service answers 422 for anything else, which the
+// tripwire would treat as "model down" and soft-divert a harmless visitor.
+func TestTripwire_RawBodyUsesContractField(t *testing.T) {
+	allowed := map[string]bool{"query": true, "form": true, "json": true, "path": true, "username": true}
+	var seen []string
+	mlMock := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		var req struct {
+			Context struct {
+				Field string `json:"field"`
+			} `json:"context"`
+		}
+		_ = json.NewDecoder(r.Body).Decode(&req)
+		seen = append(seen, req.Context.Field)
+		if !allowed[req.Context.Field] {
+			w.WriteHeader(http.StatusUnprocessableEntity)
+			return
+		}
+		w.Header().Set("Content-Type", "application/json")
+		_ = json.NewEncoder(w).Encode(mlclient.InputResult{Label: "normal", Risk: 0.05})
+	}))
+	defer mlMock.Close()
+	tw := NewTripwire(mlclient.New(mlMock.URL))
+	ua := "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36"
+
+	for _, tc := range []struct{ name, ct, body string }{
+		{"broken json", "application/json", `200|400`},
+		{"plain text", "text/plain", `hello | world`},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			seen = nil
+			req, _ := http.NewRequest(http.MethodPost, "http://localhost:8200/api/distance", strings.NewReader(tc.body))
+			req.Header.Set("Content-Type", tc.ct)
+			req.Header.Set("User-Agent", ua)
+			trip := tw.Classify(req, []byte(tc.body), VisitorView{})
+			for _, f := range seen {
+				if !allowed[f] {
+					t.Fatalf("ML called with context.field %q, not in the 04 contract", f)
+				}
+			}
+			if trip.Sev != SevNone {
+				t.Fatalf("benign raw body tripped: %+v (ML fields %v)", trip, seen)
+			}
+		})
+	}
+}

@@ -42,6 +42,20 @@ type Config struct {
 	DBPass   string // tok_db match value: the planted credential
 	DstPort  int
 	Database string
+	// Aliases: other database names planted lures advertise (e.g. the Aetees /.env.bak DATABASE_URL); accepted like Database.
+	Aliases []string
+}
+
+func (s *Server) knownDB(name string) bool {
+	if name == s.cfg.Database {
+		return true
+	}
+	for _, a := range s.cfg.Aliases {
+		if a != "" && name == a {
+			return true
+		}
+	}
+	return false
 }
 
 // Server is the Postgres decoy listener.
@@ -258,7 +272,7 @@ func (c *conn) startup() bool {
 		c.fatal("28P01", fmt.Sprintf("password authentication failed for user %q", c.user))
 		return false
 	}
-	if c.db != c.s.cfg.Database && c.db != "postgres" && c.db != c.user {
+	if !c.s.knownDB(c.db) && c.db != "postgres" && c.db != c.user {
 		c.fatal("3D000", fmt.Sprintf("database %q does not exist", c.db))
 		return false
 	}

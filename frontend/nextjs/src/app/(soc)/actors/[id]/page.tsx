@@ -32,7 +32,7 @@ import {
   Wrench,
   Brain,
   Shuffle,
-} from "lucide-react";
+} from "@/components/icons";
 
 export default function ActorProfilePage() {
   const params = useParams();

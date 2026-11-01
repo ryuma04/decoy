@@ -1,6 +1,9 @@
 package ssh
 
-import "testing"
+import (
+	"strings"
+	"testing"
+)
 
 func feedAll(e *LineEditor, chunks ...string) []Line {
 	var all []Line
@@ -121,4 +124,31 @@ func FuzzLineEditor(f *testing.F) {
 			t.Fatalf("cursor %d out of range %d", e.cursor, len(e.buf))
 		}
 	})
+}
+
+func TestSecretModeDoesNotEcho(t *testing.T) {
+	e := NewLineEditor("$ ")
+	e.SetSecret(true)
+
+	echo, lines := e.Feed([]byte("secretpassword\r"))
+	if len(lines) != 1 || lines[0].Text != "secretpassword" {
+		t.Fatalf("expected 1 line with text 'secretpassword', got: %+v", lines)
+	}
+	// Echo must NOT contain the secret characters
+	if strings.Contains(echo, "secretpassword") {
+		t.Fatalf("secret mode echoed secret characters: %q", echo)
+	}
+	if echo != "\r\n" {
+		t.Fatalf("expected only CRLF echo, got: %q", echo)
+	}
+
+	// Once secret mode is turned off, normal echoing resumes
+	e.SetSecret(false)
+	echoNormal, linesNormal := e.Feed([]byte("normalcommand\r"))
+	if len(linesNormal) != 1 || linesNormal[0].Text != "normalcommand" {
+		t.Fatalf("expected normalcommand, got: %+v", linesNormal)
+	}
+	if !strings.Contains(echoNormal, "normalcommand") {
+		t.Fatalf("normal mode should echo input, got: %q", echoNormal)
+	}
 }

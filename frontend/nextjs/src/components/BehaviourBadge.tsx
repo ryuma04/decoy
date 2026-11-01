@@ -1,6 +1,6 @@
 import React from "react";
 import type { BehaviourClass } from "@/lib/types";
-import { User, Terminal, Sparkles, Bot, HelpCircle } from "lucide-react";
+import { User, Terminal, Sparkles, Bot, HelpCircle } from "@/components/icons";
 
 interface Props {
   behaviourClass: BehaviourClass;

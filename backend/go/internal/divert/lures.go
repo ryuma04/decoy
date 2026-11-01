@@ -120,7 +120,7 @@ PAYMENT_GATEWAY_KEY="rzp_live_8f0a1c2d3e4b"
 			"path":         "/.env.bak",
 			"honeyfile_id": "tok_aetees_admin",
 			"bytes":        len(dataBytes),
-		}, nil, []string{"tok_aetees_admin"})
+		}, nil, []string{"tok_aetees_admin", "tok_db"}) // the file leaks both: admin password and DATABASE_URL password
 	}
 
 	w.Header().Set("Content-Type", "text/plain; charset=utf-8")

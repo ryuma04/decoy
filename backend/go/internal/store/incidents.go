@@ -271,26 +271,26 @@ func (s *Store) Actions(ctx context.Context, incidentID string) ([]ActionRow, er
 
 // Diversion is the divert proxy's current state for one IP (policy diverted_ip / released_ip).
 type Diversion struct {
-	IP     string    `json:"ip"`
-	State  string    `json:"state"` // diverted | released
-	Until  time.Time `json:"until"`
-	Reason string    `json:"reason"` // last session.diverted / session.released reason, if any
+	IP     string     `json:"ip"`
+	State  string     `json:"state"` // diverted | released
+	Until  time.Time  `json:"until"`
+	Reason string     `json:"reason"` // last session.diverted / session.released reason, if any
 	At     *time.Time `json:"at"`
-	Actor  *string   `json:"actor_label"`
+	Actor  *string    `json:"actor_label"`
 }
 
 // Diversions lists IPs the proxy diverts or was told to release, with the latest proxy event for each.
 func (s *Store) Diversions(ctx context.Context) ([]Diversion, error) {
 	rows, err := s.Pool.Query(ctx, `
 		SELECT p.value, CASE p.kind WHEN 'diverted_ip' THEN 'diverted' ELSE 'released' END, COALESCE(p.until, now() + interval '24 hours'),
-		       COALESCE(ev.data->>'reason', ''), ev.ts, ev.label
+		       CASE WHEN ev.data->>'shadow' = 'true' THEN 'would divert (shadow): ' ELSE '' END || COALESCE(ev.data->>'reason', ''), ev.ts, ev.label
 		FROM policy p
 		LEFT JOIN LATERAL (SELECT e.data, e.ts, a.label FROM events e LEFT JOIN actors a ON a.actor_id = e.actor_id
 		    WHERE e.type IN ('session.diverted', 'session.released') AND host(e.src_ip) = p.value ORDER BY e.ts DESC LIMIT 1) ev ON true
 		WHERE p.kind IN ('diverted_ip', 'released_ip') AND (p.until IS NULL OR p.until > now())
 		UNION ALL
 		SELECT * FROM (SELECT DISTINCT ON (host(e.src_ip)) host(e.src_ip), CASE e.type WHEN 'session.diverted' THEN 'diverted' ELSE 'released' END,
-		       e.ts + interval '24 hours', COALESCE(e.data->>'reason', ''), e.ts, a.label
+		       e.ts + interval '24 hours', CASE WHEN e.data->>'shadow' = 'true' THEN 'would divert (shadow): ' ELSE '' END || COALESCE(e.data->>'reason', ''), e.ts, a.label
 		FROM events e LEFT JOIN actors a ON a.actor_id = e.actor_id
 		WHERE e.type IN ('session.diverted', 'session.released') AND e.ts > now() - interval '24 hours'
 		  AND NOT EXISTS (SELECT 1 FROM policy p WHERE p.kind IN ('diverted_ip', 'released_ip') AND p.value = host(e.src_ip))
@@ -438,7 +438,6 @@ func (s *Store) Timeseries(ctx context.Context, metric string, since time.Time, 
 	}
 	return out, rows.Err()
 }
-
 
 // SaveNarration stores a generated or templated narrative (09 Readable message text).
 func (s *Store) SaveNarration(ctx context.Context, kind, refID, factsHash, headline, body string, bullets []string, source string, model *string) error {
