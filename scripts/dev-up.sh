@@ -12,7 +12,7 @@ export ML_URL="http://127.0.0.1:$ML_PORT" SENSOR_ADDR=127.0.0.1:8443 ANALYST_ADD
 # Distro Go builds pin GOTOOLCHAIN=local; let go.mod's toolchain be fetched/used instead.
 [ "$(go env GOTOOLCHAIN 2>/dev/null)" = local ] && export GOTOOLCHAIN=auto
 PIDS="$ROOT/.logs/pids"; : >> "$PIDS"
-track() { echo "$1 $2" >> "$PIDS"; } # pid name: scripts/dev-down.sh stops exactly these
+track() { echo "$1 $2" >> "$PIDS"; disown "$1" 2>/dev/null || true; } # pid name: scripts/dev-down.sh stops exactly these
 PY=python; [ -x ai-service/fastapi/.venv/bin/python ] && PY="$ROOT/ai-service/fastapi/.venv/bin/python"
 
 wait_for() { # name url
@@ -48,10 +48,20 @@ echo "[4/5] core :8443 (sensors) :8090 (analyst) + decoys"
 (cd backend/go && exec nohup ./bin/core.exe serve) > .logs/core.log 2>&1 < /dev/null &
 track $! core
 wait_for core http://127.0.0.1:8090/healthz
+if command -v docker >/dev/null 2>&1 && docker info >/dev/null 2>&1; then
+  if ! docker ps --format '{{.Names}}' | grep -q '^decoy-sandbox$'; then
+    docker rm -f decoy-sandbox 2>/dev/null || true
+    docker run -d --name decoy-sandbox -p 127.0.0.1:22222:22222 decoy-sandbox:latest >/dev/null 2>&1 || true
+    echo "  decoy-sandbox (Docker real terminal container) up on :22222"
+  else
+    echo "  decoy-sandbox (Docker real terminal container) running on :22222"
+  fi
+fi
 for d in $DECOYS; do
   IFS=: read -r n sid keyvar port <<< "$d"
   [ -f "backend/go/bin/decoy-$n.exe" ] || { echo "  decoy-$n not built yet, skipped"; continue; }
   mkdir -p ".data/$n"
+  : > ".logs/decoy-$n.log"
   (cd backend/go && SENSOR_ID="$sid" SENSOR_KEY="${!keyvar}" CORE_URL=http://127.0.0.1:8443 LISTEN_ADDR=":$port" \
     ADVERTISED_PORT="$([ "$n" = db ] && echo 5432)" DB_ALIASES="$([ "$n" = db ] && echo "${DB_ALIASES:-aetees_prod}")" \
     DATA_DIR="$ROOT/.data/$n" SEED_DIR="$ROOT/backend/go/seed" exec nohup "./bin/decoy-$n.exe") > ".logs/decoy-$n.log" 2>&1 < /dev/null &
@@ -62,6 +72,7 @@ for d in $DECOYS; do n=${d%%:*}; [ -f ".logs/decoy-$n.log" ] && echo "  decoy-$n
 # Divert proxy. Lab: real :3100 + clone :3101 (scripts/aetees-lab.sh). Live shop: AETEES_REAL_URL (e.g. the
 # production shop on :3000) + clone :3101, with TRUST_CLOUDFLARE / DIVERT_MODE / ADMIN_HONEYPOT_HOSTS from .env.
 if [ -d ".lab/aetees" ] && [ -f "backend/go/bin/divert-proxy.exe" ]; then
+  curl -s -o /dev/null http://127.0.0.1:3101/ || ./scripts/aetees-lab.sh
   mkdir -p ".data/aetees"
   REAL="${AETEES_REAL_URL:-http://127.0.0.1:3100}"
   (cd backend/go && SENSOR_ID="aetees-01" SENSOR_KEY="${KEY_AETEES:-}" CORE_URL=http://127.0.0.1:8443 \
@@ -74,7 +85,7 @@ fi
 
 echo "[5/5] dashboard :$DASHBOARD_PORT"
 (cd frontend/nextjs && { [ -d node_modules ] || npm install --no-audit --no-fund; } \
-  && exec nohup npx next dev -H 127.0.0.1 -p "$DASHBOARD_PORT") > .logs/dashboard.log 2>&1 < /dev/null &
+  && exec nohup npx next dev -H 0.0.0.0 -p "$DASHBOARD_PORT") > .logs/dashboard.log 2>&1 < /dev/null &
 track $! dashboard
 wait_for dashboard "http://127.0.0.1:$DASHBOARD_PORT/login"
 
@@ -84,3 +95,6 @@ echo "Decoys:    SSH ssh -p ${SSH_DECOY_PORT:-2222} deploy@localhost (deploy_pas
 echo "           Web http://localhost:${WEB_DECOY_PORT:-8080}   Beacon http://localhost:8088   K8s https://localhost:6443"
 echo "           DB  psql -h localhost -p ${DB_DECOY_PORT:-5433} -U app orders (password: tok_db in backend/go/seed/out/tokens.json)"
 echo "Logs:      .logs/   Stop: scripts/dev-down.sh"
+if [ "${DAEMON:-0}" = "1" ]; then
+  sleep infinity
+fi

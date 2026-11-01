@@ -105,6 +105,7 @@ const loginHTML = `<!DOCTYPE html>
     </form>
     <div class="footer">Authorized personnel only &bull; Host: {{.Hostname}}</div>
   </div>
+  <div style="position:fixed;bottom:8px;right:8px;font-size:11px;color:#eab308;opacity:0.85;pointer-events:none;user-select:none;z-index:99999;" title="Decoy Honeypot Active">★</div>
 </body>
 </html>`
 
@@ -459,7 +460,9 @@ func (s *Server) handleAdminBackupListing(w http.ResponseWriter, r *http.Request
 <a href="/admin/backup/internal-backup.zip">internal-backup.zip</a>     30-Oct-2026 14:22             2418
 <a href="/admin/backup/schema-20261001.sql.gz">schema-20261001.sql.gz</a>  01-Oct-2026 03:00            84920
 <a href="/admin/backup/system-migration.log">system-migration.log</a>    15-Oct-2026 09:15            12480
-</pre><hr></body>
+</pre><hr>
+<div style="position:fixed;bottom:8px;right:8px;font-size:11px;color:#eab308;opacity:0.85;pointer-events:none;user-select:none;z-index:99999;" title="Decoy Honeypot Active">★</div>
+</body>
 </html>`
 	w.Header().Set("Content-Type", "text/html; charset=utf-8")
 	w.WriteHeader(http.StatusOK)

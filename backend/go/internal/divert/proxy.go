@@ -13,6 +13,7 @@ import (
 	"net/http"
 	"net/http/httputil"
 	"net/url"
+	"strconv"
 	"strings"
 	"sync"
 	"time"
@@ -152,6 +153,7 @@ func (p *Proxy) setupResponseModifiers() {
 		insecureCookiesOnHTTP(resp)
 		secureUpstreamRedirect(resp)
 		p.handleCloneResponse(resp)
+		injectHoneypotStar(resp)
 		return nil
 	}
 }
@@ -165,6 +167,39 @@ func insecureCookiesOnHTTP(resp *http.Response) {
 		return
 	}
 	stripSecureCookies(resp.Header)
+}
+
+// injectHoneypotStar places a tiny, subtle star in the bottom-right corner of HTML responses
+// served by the clone/honeypot so the presenter can easily differentiate it from the real shop.
+func injectHoneypotStar(resp *http.Response) {
+	if resp == nil || resp.Body == nil {
+		return
+	}
+	ct := resp.Header.Get("Content-Type")
+	if !strings.Contains(ct, "text/html") {
+		return
+	}
+	if resp.StatusCode < 200 || resp.StatusCode >= 300 {
+		return
+	}
+	bodyBytes, err := io.ReadAll(resp.Body)
+	if err != nil {
+		return
+	}
+	_ = resp.Body.Close()
+
+	star := `<div id="honeypot-indicator" style="position:fixed;bottom:8px;right:8px;font-size:11px;color:#eab308;opacity:0.85;pointer-events:none;user-select:none;z-index:999999;" title="Decoy Honeypot Active">★</div>`
+	s := string(bodyBytes)
+	if strings.Contains(s, "</body>") {
+		s = strings.Replace(s, "</body>", star+"</body>", 1)
+	} else {
+		s += star
+	}
+
+	newBody := []byte(s)
+	resp.Body = io.NopCloser(bytes.NewReader(newBody))
+	resp.ContentLength = int64(len(newBody))
+	resp.Header.Set("Content-Length", strconv.Itoa(len(newBody)))
 }
 
 func (p *Proxy) handleCloneResponse(resp *http.Response) {

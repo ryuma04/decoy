@@ -86,13 +86,19 @@ func main() {
 	defer kit.Close()
 
 	// Build and run server.
+	sandboxAddr := os.Getenv("DOCKER_SANDBOX_ADDR")
+	if sandboxAddr == "" {
+		sandboxAddr = "127.0.0.1:22222"
+	}
+
 	srv, err := decoySSH.NewServer(decoySSH.ServerConfig{
-		Kit:        kit,
-		Persona:    p,
-		Lures:      lures,
-		DeployKey:  deployKey,
-		ListenAddr: cfg.Addr,
-		DstPort:    dstPort,
+		Kit:               kit,
+		Persona:           p,
+		Lures:             lures,
+		DeployKey:         deployKey,
+		ListenAddr:        cfg.Addr,
+		DstPort:           dstPort,
+		DockerSandboxAddr: sandboxAddr,
 	})
 	if err != nil {
 		slog.Error("failed to create ssh decoy server", "err", err)

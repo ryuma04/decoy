@@ -8,7 +8,9 @@ import (
 	"crypto/ed25519"
 	"crypto/rand"
 	"crypto/sha256"
+	"encoding/binary"
 	"encoding/json"
+	"io"
 	"encoding/pem"
 	"fmt"
 	"log/slog"
@@ -59,6 +61,7 @@ type ServerConfig struct {
 	MaxCommands  int
 	MinLatencyMS int
 	MaxLatencyMS int
+	DockerSandboxAddr string
 }
 
 // Server is the SSH decoy.
@@ -429,6 +432,12 @@ func (s *Server) handleSession(ch ssh.Channel, reqs <-chan *ssh.Request, st *con
 	cconn *countingConn, host string, connStart time.Time) {
 
 	defer ch.Close()
+
+	if s.cfg.DockerSandboxAddr != "" {
+		if s.proxyToSandbox(ch, reqs, st, cconn, host, connStart) {
+			return
+		}
+	}
 
 	base := BaseTree(s.cfg.Persona, s.cfg.Lures)
 	fs := fakefs.NewSession(base)
@@ -995,4 +1004,161 @@ func LoadLuresFromSeed(seedDir string) ([]Lure, error) {
 		})
 	}
 	return lures, nil
+}
+
+func (s *Server) proxyToSandbox(ch ssh.Channel, reqs <-chan *ssh.Request, st *connState, cconn *countingConn, host string, connStart time.Time) bool {
+	if s.cfg.DockerSandboxAddr == "" {
+		return false
+	}
+	conn, err := net.DialTimeout("tcp", s.cfg.DockerSandboxAddr, 2*time.Second)
+	if err != nil {
+		return false
+	}
+
+	clientConfig := &ssh.ClientConfig{
+		User: st.user.Name,
+		Auth: []ssh.AuthMethod{
+			ssh.Password("HalSummer2023!"),
+		},
+		HostKeyCallback: ssh.InsecureIgnoreHostKey(),
+		Timeout:         5 * time.Second,
+	}
+
+	cClientConn, chans, rReqs, err := ssh.NewClientConn(conn, s.cfg.DockerSandboxAddr, clientConfig)
+	if err != nil {
+		conn.Close()
+		return false
+	}
+	cClient := ssh.NewClient(cClientConn, chans, rReqs)
+	defer cClient.Close()
+
+	cSession, err := cClient.NewSession()
+	if err != nil {
+		return false
+	}
+	defer cSession.Close()
+
+	sStdin, err := cSession.StdinPipe()
+	if err != nil {
+		return false
+	}
+	sStdout, err := cSession.StdoutPipe()
+	if err != nil {
+		return false
+	}
+	sStderr, err := cSession.StderrPipe()
+	if err != nil {
+		return false
+	}
+
+	go func() {
+		for req := range reqs {
+			switch req.Type {
+			case "pty-req":
+				term := "xterm-256color"
+				if len(req.Payload) >= 4 {
+					tLen := int(req.Payload[3])
+					if len(req.Payload) >= 4+tLen {
+						term = string(req.Payload[4 : 4+tLen])
+					}
+				}
+				_ = cSession.RequestPty(term, 80, 24, ssh.TerminalModes{
+					ssh.ECHO:          1,
+					ssh.TTY_OP_ISPEED: 14400,
+					ssh.TTY_OP_OSPEED: 14400,
+				})
+				if req.WantReply {
+					req.Reply(true, nil)
+				}
+			case "shell":
+				_ = cSession.Shell()
+				if req.WantReply {
+					req.Reply(true, nil)
+				}
+			case "window-change":
+				if len(req.Payload) >= 8 {
+					w := int(binary.BigEndian.Uint32(req.Payload[0:4]))
+					h := int(binary.BigEndian.Uint32(req.Payload[4:8]))
+					_ = cSession.WindowChange(h, w)
+				}
+				if req.WantReply {
+					req.Reply(true, nil)
+				}
+			case "exec":
+				cmd := ""
+				if len(req.Payload) >= 4 {
+					l := int(binary.BigEndian.Uint32(req.Payload[0:4]))
+					if l > 0 && len(req.Payload) >= 4+l {
+						cmd = string(req.Payload[4 : 4+l])
+					}
+				}
+				_ = cSession.Start(cmd)
+				if req.WantReply {
+					req.Reply(true, nil)
+				}
+			default:
+				if req.WantReply {
+					req.Reply(false, nil)
+				}
+			}
+		}
+	}()
+
+	var triggerMu sync.Mutex
+	triggered := map[string]bool{}
+	emitToken := func(tokenID, pth string) {
+		triggerMu.Lock()
+		defer triggerMu.Unlock()
+		if triggered[tokenID] {
+			return
+		}
+		triggered[tokenID] = true
+		tokRef := tokenID
+		st.session.Event("file.read", mazeNode, fileReadData{
+			Path:        pth,
+			HoneyfileID: &tokRef,
+			Bytes:       len(tokenID),
+		}, nil, []string{tokenID})
+	}
+
+	var wg sync.WaitGroup
+	wg.Add(2)
+
+	go func() {
+		defer sStdin.Close()
+		_, _ = io.Copy(sStdin, ch)
+	}()
+
+	go func() {
+		defer wg.Done()
+		buf := make([]byte, 4096)
+		for {
+			n, err := sStdout.Read(buf)
+			if n > 0 {
+				chunk := buf[:n]
+				sChunk := string(chunk)
+				if strings.Contains(sChunk, "AKIA3EXNNKIAOP2SNCD5") {
+					emitToken("tok_aws_k7", "/home/deploy/.aws/credentials")
+				}
+				if strings.Contains(sChunk, "neaUPVW4RYGJViL9C8iUHxNtr8HULVBeiJKsY0Eg9Lq9GhMv") {
+					emitToken("tok_kube", "/opt/deploy/kubeconfig")
+				}
+				_, _ = ch.Write(chunk)
+			}
+			if err != nil {
+				return
+			}
+		}
+	}()
+
+	go func() {
+		defer wg.Done()
+		_, _ = io.Copy(ch.Stderr(), sStderr)
+	}()
+
+	_ = cSession.Wait()
+	wg.Wait()
+
+	st.emitClose(int(time.Since(connStart).Milliseconds()), cconn.bytesIn.Load(), cconn.bytesOut.Load(), "clean")
+	return true
 }

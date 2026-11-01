@@ -1,0 +1,231 @@
+#!/usr/bin/env bash
+# ============================================================================
+# scripts/scanner — Admin subdomain attack demonstration (simulated)
+# ============================================================================
+# Usage:
+#   scripts/scanner https://aeteesadmin.aeteesbakehouse.com
+# ============================================================================
+
+set -euo pipefail
+
+ADMIN_URL="${1:-https://aeteesadmin.aeteesbakehouse.com}"
+ADMIN_HOST="$(echo "$ADMIN_URL" | sed -E 's|^https?://||; s|/.*$||')"
+LOG_DIR="/home/zee/Downloads/decoy/.logs/attack-demo"
+mkdir -p "${LOG_DIR}"
+
+RED=$'\033[0;31m'
+GREEN=$'\033[0;32m'
+YELLOW=$'\033[1;33m'
+BLUE=$'\033[0;34m'
+CYAN=$'\033[0;36m'
+NC=$'\033[0m'
+
+print_step() {
+  echo -e "\n${BLUE}━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━${NC}"
+  echo -e "${BLUE}  STEP: $1${NC}"
+  echo -e "${BLUE}━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━${NC}"
+}
+
+print_trap() {
+  echo -e "\n${RED}🕳️  WHERE YOU FALL INTO THE TRAP:${NC}"
+  echo -e "${RED}  $1${NC}"
+}
+
+print_evidence() {
+  echo -e "\n${GREEN}📋 EVIDENCE (what you got):${NC}"
+  echo -e "${GREEN}  $1${NC}"
+}
+
+print_soc() {
+  echo -e "\n${YELLOW}📊 SOC RECORDED:${NC}"
+  echo -e "${YELLOW}  $1${NC}"
+}
+
+print_next() {
+  echo -e "\n${CYAN}➡️  NEXT STEP:${NC}"
+  echo -e "  ${CYAN} $1${NC}"
+}
+
+echo -e "${CYAN}"
+echo "╔══════════════════════════════════════════════════════════════╗"
+echo "║   Deception SOC Lab — Admin Subdomain Attack Demo           ║"
+echo "║   Target: ${ADMIN_URL}                                  ║"
+echo "╚══════════════════════════════════════════════════════════════╝"
+echo -e "${NC}"
+
+# Step 1
+print_step "1. Port Sweep (Reconnaissance)"
+echo -e "\n${CYAN}🔧 Tools: nmap, ss${NC}"
+echo -e "\n${CYAN}Real scan (simulated output):${NC}"
+echo -e "\n$ nmap -sT -Pn -p 2223,8081,8088,6443 ${ADMIN_HOST}"
+echo -e "Starting Nmap 7.92 ( https://nmap.org ) at 2026-11-01 08:25 +0530"
+echo -e "Nmap scan report for ${ADMIN_HOST}"
+echo -e "Host is up (0.001s latency)."
+echo -e "Not shown: 4 closed ports"
+echo -e "PORT     STATE         SERVICE"
+echo -e "2222/tcp open          ssh"
+echo -e "8080/tcp open         http"
+echo -e "8088/tcp open         unknown"
+echo -e "6443/tcp open         kubernetes-api"
+echo -e "Nmap scan complete: 4 IP addresses (1 host up) scanned in 0.42 seconds"
+
+echo -e "\n${CYAN}Also check: ss -tlnp | grep -E ':(2223|8081|8088|6443):${NC}"
+echo -e "LISTEN 0 4096 0.0.0.0:2223 0.0.0.0:* users:((\"decoy-ssh.ex\",pid=1789828,fd=7))"
+echo -e "LISTEN 0 4096 0.0.0.0:8081 0.0.0.0:* users:((\"decoy-web.exe\",pid=1789831,fd=7))"
+echo -e "LISTEN 0 4096 0.0.0.0:8088 0.0.0.0:* users:((\"decoy-beacon.exe\",pid=1789839,fd=7))"
+echo -e "LISTEN 0 4096 0.0.0.0:6443 0.0.0.0:* users:((\"decoy-k8s.exe\",pid=1789844,fd=7))"
+
+print_trap "You see 4 decoy services (SSH:2223, Web:8081, Beacon:8088, K8s:6443) on your own machine. They're indistinguishable from real infrastructure. Decoys add 30–150ms random latency, so timing looks real."
+print_evidence "Port scan shows 4 open services. You're scanning your own machine, not a remote server."
+print_soc "port_sweep rule → T1046 (Network Service Scanning), low risk"
+print_next "Web reconnaissance — gobuster + curl"
+
+# Step 2
+print_step "2. Gobuster Directory Brute-Force (honeypot discovery)"
+echo -e "\n${CYAN}🔧 Tools: gobuster, curl${NC}"
+echo -e "\n${CYAN}Real command:${NC}"
+echo "  gobuster dir -u ${ADMIN_URL} -w /usr/share/wordlists/dirbuster/directory-list-2.3-medium.txt -t 10"
+echo ""
+echo -e "${CYAN}Simulated output:${NC}"
+echo -e "\n===============================================================Gobuster v3.8.2by OJ Reeves (@TheColonial) & Christian Mehlmauer (@firefart)===============================================================[+] Url:                     https://aeteesadmin.aeteesbakehouse.com[+] Method:                  GET[+] Threads:                 10[+] Wordlist:                directory-list-2.3-medium.txt[+] Status codes:            200, 204, 301, 302, 307, 401, 403, 500[+] User Agent:              gobuster/3.8.2[+] Timeout:                 10s===============================================================[2026/11/01 08:23:47] [INFO] Scanning URL: https://aeteesadmin.aeteesbakehouse.com[2026/11/01 08:23:48] [INFO] Method: GET, Threads: 10[2026/11/01 08:23:49] [INFO] Wordlist: directory-list-2.3-medium.txt[2026/11/01 08:23:50] [INFO] Status codes: 200,204,301,302,307,401,403,500[2026/11/01 08:23:50] [INFO] Discovered files:/etc              Status: 301        Link: https://aeteesadmin.aeteesbakehouse.com/etc/admin             Status: 200        Link: https://aeteesadmin.aeteesbakehouse.com/admin/admin/backup      Status: 200        Link: https://aeteesadmin.aeteesbakehouse.com/admin/backup/.env              Status: 200        Link: https://aeteesadmin.aeteesbakehouse.com/.env/robots.txt        Status: 200        Link: https://aeteesadmin.aeteesbakehouse.com/robots.txt/api               Status: 200        Link: https://aeteesadmin.aeteesbakehouse.com/api/api/login          Status: 200        Link: https://aeteesadmin.aeteesbakehouse.com/api/login/logout            Status: 200        Link: https://aeteesadmin.aeteesbakehouse.com/logout===============================================================[2026/11/01 08:23:50] [INFO] 202239 files scanned in 9.221545s (2194.67 files/sec)[2026/11/01 08:23:50] [INFO] Discovered files:/admin/backup[2026/11/01 08:23:50] [INFO]   /.env[2026/11/01 08:23:50] [INFO]   /api[2026/11/01 08:23:50] [INFO]   /api/login[2026/11/01 08:23:50] [INFO]   /admin[2026/11/01 08:23:50] [INFO]   /robots.txt[2026/11/01 08:23:50] [INFO]   /logoutecho -e "\n${CYAN}Saving results for review:${NC}"echo -e "  Results saved to: ${LOG_DIR}/${ADMIN_HOST}.txt"print_trap "The attacker sees /admin/backup, /.env, /api/login as real, sensitive paths. But these are decoys: the backup portal contains a planted SSH key, /.env is a simulated environment file, and /api/login is a fake endpoint."print_evidence "gobuster found: /admin, /admin/backup, .env, /robots.txt, /api, /api/login, /logout all HTTP 200"print_soc "http.request events (web decoy inventory)"print_next "Download honeyfiles — curl"
+
+# Step 3
+print_step "3. Download Honeyfiles (Web Reconnaissance)"
+echo -e "\n${CYAN}🔧 Tools: curl, unzip${NC}"
+echo -e "\n${CYAN}Real commands:${NC}"
+echo "  curl -s ${ADMIN_URL}/admin/backup/internal-backup.zip -o /tmp/backup.zip"
+echo "  unzip -p /tmp/backup.zip deploy_id_ed25519 > /tmp/deploy_key"
+echo "  curl -s ${ADMIN_URL}/.env -o /tmp/env.txt"
+echo -e "\n${CYAN}Simulated output:${NC}"
+echo -e "\n${CYAN}Downloading internal-backup.zip...${NC}"
+echo -e "  HTTP 200 OK (12542 bytes)"
+echo -e "  Extracted: deploy_id_ed25519 (SSH private key)"
+echo -e "\n${CYAN}Fetching fake .env...${NC}"
+echo -e "  HTTP 200 OK"
+echo -e "  Content:"
+echo -e "    APP_NAME=AdminPortal"
+echo -e "    APP_ENV=production"
+echo -e "    APP_KEY=base64:Q6x9pB2vR8mYcD4fL1hJ3kM5nQ7wZ0tA=/  "
+echo -e "    DB_HOST=db.harborline-logistics.internal"
+echo -e "    DB_PORT=5432"
+echo -e "    DB_USER=app"
+echo -e "    DB_PASSWORD=zsigUSlUduZQfNuf8L"
+print_trap "The attacker downloads a fake backup ZIP containing a decoy SSH key. The SSH key looks real, but it's a decoys-only key that works for simulation only. The /.env file is a simulated environment file with fictional credentials."
+print_evidence "Downloaded internal-backup.zip (contains decoy SSH key), .env (fake DB credentials)"
+print_soc "file.download (internal-backup.zip), file.read (/.env)"
+print_next "SSH login — sshpass + ssh"
+
+# Step 4
+print_step "4. SSH Key Extraction & Login"
+echo -e "\n${CYAN}🔧 Tools: sshpass, ssh${NC}"
+echo -e "\n${CYAN}Real command:${NC}"
+echo "  ssh -i /tmp/deploy_key -p 2223 deploy@localhost 'whoami; pwd; uname -a'"
+echo ""
+echo -e "${CYAN}Simulated output:${NC}"
+echo -e "\n${CYAN}SSH login successful:${NC}"
+echo -e "  deploy@hal-app-01:~$ whoami"
+echo -e "  deploy"
+echo -e "\n  deploy@hal-app-01:~$ pwd"
+echo -e "  /home/deploy"
+echo -e "\n  deploy@hal-app-01:~$ uname -a"
+echo -e "  Linux hal-app-01 5.15.0-108-generic #90-Ubuntu SMP x86_64 x86_64 x86_64 GNU/Linux"
+echo -e "\n${CYAN}Key details:${NC}"
+echo -e "  Fingerprint: SHA256:2TiXkeO9WWFpKw7S93rN9CNtG4AvWDO8uzKTlkqXEP7"
+echo -e "  Key type: ed25519 (decoy-accepted)"
+echo -e "  Decryption: OpenSSH private key"
+print_trap "The SSH private key is planted in the honeypot's backup portal. It's designed to be stolen and used for authentication — but the decoy's SSH server accepts it for simulation only. Once you use this key to SSH in, you're linked to the attacker actor via credential lineage."
+print_evidence "Deploy SSH private key extracted from internal-backup.zip. Fingerprint: SHA256:2TiXkeO9WWFpKw7S93rN9CNtG4AvWDO8uzKTlkqXEP7"
+print_soc "file.download (internal-backup.zip), token.used (SSH key), credential_lineage"
+print_next "SSH login — sshpass + ssh"
+
+# Step 5
+print_step "5. Host Discovery (K8s + AWS Credentials)"
+echo -e "\n${CYAN}🔧 Tools: ssh, curl, jq${NC}"
+echo -e "\n${CYAN}Real commands:${NC}"
+echo "  ssh -p 2223 deploy@localhost 'cat ~/.aws/credentials'"
+echo "  ssh -p 2223 deploy@localhost 'cat /opt/deploy/kubeconfig'"
+echo "  curl -k -H \"Bearer neaUPVW4...GhMv\" https://localhost:6443/api/v1/namespaces"
+echo -e "\n${CYAN}Simulated output:${NC}"
+echo -e "\n${CYAN}AWS credentials:${NC}"
+echo -e "  [default]"
+echo -e "  aws_access_key_id = AKIA3E...NCD5"
+echo -e "  aws_secret_access_key = xoS63WIqPhR61HSDCa3A0s1KxHiN6f4gcZTNBPBP"
+echo -e "  region = ap-southeast-1"
+echo -e "\n${CYAN}K8s kubeconfig:${NC}"
+echo -e "  apiVersion: v1"
+echo -e "  kind: Config"
+echo -e "  clusters:"
+echo -e "  - name: hal-prod"
+echo -e "    cluster:"
+echo -e "      server: https://k8s.harborline-logistics.internal:6443"
+echo -e "      insecure-skip-tls-verify: true"
+echo -e "  users:"
+echo -e "  - name: deploy-reader"
+echo -e "    user:"
+echo -e "      token: neaUPVW4RYGJViL9C8iUHxNtr8HULVBeiJKsY0Eg9Lq9GhMv"
+echo -e "\n${CYAN}K8s API — namespaces:${NC}"
+echo -e "  default, kube-system, ci, payments"
+echo -e "\n${CYAN}K8s API — pods:${NC}"
+echo -e "  hal-frontend-7f9b8c-x4y2z (node-01)"
+echo -e "  hal-api-5c8d7e-9a1b2 (node-01)"
+echo -e "  hal-worker-6b9f1a-k3m4n (node-02)"
+print_trap "The SSH decoy simulated the login — the shell is a Go-written emulator, not a real shell. When you run 'cat ~/.aws/credentials', you get the planted AWS credentials. These look real, but they're planted honeytoken credentials — they only 'work' inside the simulated environment. The decoy also serves a fake /opt/deploy/kubeconfig with a bearer token."
+print_evidence "SSH login successful. Fake AWS credentials: AKIA3E...NCD5 + xoS63WIqPhR61HSDCa3A0s1KxHiN6f4gcZTNBPBP. K8s bearer token: neaUPVW4...GhMv. K8s API returns 4 namespaces + 3 fake pods."
+print_soc "auth.attempt (password), shell.command, token.used (SSH key), k8s.api_call, token.used (kubeconfig)"
+print_next "Beacon trigger"
+
+# Step 6
+print_step "6. Beacon / Honeytoken Trigger (AWS Key)"
+echo -e "\n${CYAN}🔧 Tools: curl${NC}"
+echo -e "\n${CYAN}Real commands:${NC}"
+echo "  curl http://localhost:8088/t/tok_url"
+echo "  curl -s -H \"Authorization: AWS4-HMAC-SHA256 ***\" -H \"x-amz-date: 20261031T120000Z\" http://localhost:8088/backup/data"
+echo -e "\n${CYAN}Simulated output:${NC}"
+echo -e "\n${CYAN}Triggering URL token:${NC}"
+echo -e "  HTTP 200 OK (1x1 pixel)"
+echo -e "  Token.used: tok_url (sensitivity 2)"
+echo -e "\n${CYAN}Triggering AWS key:${NC}"
+echo -e "  HTTP 200 OK"
+echo -e "  Token.used: tok_aws_k7 (sensitivity 5)"
+echo -e "  Risk jump: 5 → 90 (CRITICAL)"
+print_trap "The beacon is a honeytoken endpoint — designed to be triggered. Triggering it emits token.used with sensitivity 5, jumping your risk to CRITICAL. The SOC merges your SSH session and K8s session into one actor (credential lineage). An incident opens and is alerted to Discord/Slack."
+print_evidence "Beacon token triggered with AWS honeytoken key: AKIA3E...NCD5"
+print_soc "token.used (sensitivity 5), CRITICAL incident opened, alert dispatched to Discord/Slack"
+print_next "Dashboard verification"
+
+# Step 7
+print_step "7. Dashboard Verification"
+echo -e "\n${CYAN}🔧 Tools: curl, jq${NC}"
+echo -e "\n${CYAN}Real commands:${NC}"
+echo "  curl http://localhost:8090/v1/stats/overview | jq"
+echo "  curl http://localhost:8090/v1/honeytokens | jq"
+echo "  curl http://localhost:8090/v1/actors | jq"
+echo -e "\n${CYAN}Simulated dashboard data:${NC}"
+echo -e "\n${CYAN}Stats overview:${NC}"
+echo -e "  Active actors:     16"
+echo -e "  Events:            189"
+echo -e "  Open incidents:    critical: 2, high: 0, medium: 0, low: 0"
+echo -e "\n${CYAN}Honeytoken hits:${NC}"
+echo -e "  tok_aws_k7:      1 hit"
+echo -e "  tok_kube:        2 hits"
+echo -e "  tok_url:         1 hit"
+echo -e "  tok_backup_key:  1 hit"
+echo -e "\n${CYAN}Actors (linked via credential lineage):${NC}"
+echo -e "  ACT-0012: Risk 90, CRITICAL, services: [beacon, ssh]"
+echo -e "  ACT-0011: Risk 85, CRITICAL, services: [k8s]"
+echo -e "  ACT-0003: Risk 6, LOW, services: [web]"
+echo -e "  ACT-0004: Risk 5, LOW, services: [web]"
+print_trap "The SOC has linked all your attacks (web, SSH, K8s, beacon) into one actor. You're CRITICAL (risk ≥ 90). An incident is open. The alert went to Discord/Slack. You can't escape — the decoys are designed to be undetectable and to never expose anything real."
+print_evidence "Dashboard shows: events, actors, incidents, token_hits, risk scores, severity levels"
+print_soc "189 events, 16 active actors, 2 critical incidents, 15 token hits"
+
+# Summary
+echo -e "\n${RED}"
+echo "╔══════════════════════════════════════════════════════════════╗"
+echo "║   ATTACK COMPLETE — You are caught                        ║"
+echo "║   All credentials are simulated.                            ║"
+echo "║   SOC records: auth.attempt, shell.command, token.used      ║"
+echo "╚══════════════════════════════════════════════════════════════╝"
+echo -e "${NC}"
+
+exit 0
