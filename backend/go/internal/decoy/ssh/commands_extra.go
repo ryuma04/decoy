@@ -1265,6 +1265,11 @@ func cmdExport(sh *Shell, args []string, stdin string, res *Result) (string, int
 	if len(args) == 0 {
 		return cmdEnv(sh, args, stdin, res)
 	}
+	for _, a := range args {
+		if k, v, ok := strings.Cut(a, "="); ok {
+			sh.setVar(k, v)
+		}
+	}
 	return "", 0
 }
 

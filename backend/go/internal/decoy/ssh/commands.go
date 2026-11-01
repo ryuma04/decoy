@@ -45,6 +45,8 @@ type Shell struct {
 	Started     time.Time
 	Interactive bool // a pty shell (password prompts possible); false for `ssh host cmd`
 	pending     *pendingAuth
+	vars        map[string]string // shell variables (NAME=value, export, loop variables)
+	lastExit    int               // $?
 }
 
 // pendingAuth is a password prompt waiting for input. Every answer fails: the decoy has no real privilege.
@@ -104,10 +106,22 @@ func init() {
 		"logout":   func(_ *Shell, _ []string, _ string, r *Result) (string, int) { r.Logout = true; return "", 0 },
 	}
 	registerExtra(commands)
+	registerMore(commands)
 }
 
 // Run executes one command line: `;`, `&&`, `||` and `|` are split and emulated in order.
+// Run emulates one shell line: loops, $( ) / backtick substitution, then ; && || | segments with variables expanded.
 func (sh *Shell) Run(line string) Result {
+	if r, ok := sh.runLoop(line); ok {
+		sh.lastExit = r.Exit
+		return r
+	}
+	r := sh.run(sh.expandSubst(line, 0))
+	sh.lastExit = r.Exit
+	return r
+}
+
+func (sh *Shell) run(line string) Result {
 	var res Result
 	segs := splitOps(line)
 	var out strings.Builder
@@ -126,7 +140,11 @@ func (sh *Shell) Run(line string) Result {
 				}
 			}
 		}
-		argv := dropStderrRedirects(tokenize(s.text))
+		if sh.assignment(s.text) {
+			exit = 0
+			continue
+		}
+		argv := dropStderrRedirects(tokenize(sh.expandVars(s.text)))
 		if len(argv) == 0 {
 			continue
 		}
@@ -136,6 +154,7 @@ func (sh *Shell) Run(line string) Result {
 		}
 		o, code := sh.exec(argv, stdin, &res)
 		exit = code
+		sh.lastExit = code // $? for the next segment of the same line
 		if redirect != "" {
 			if !sh.FS.Write(sh.abs(redirect), o, sh.User.Name, appendMode) {
 				out.WriteString("bash: " + redirect + ": No such file or directory\n")

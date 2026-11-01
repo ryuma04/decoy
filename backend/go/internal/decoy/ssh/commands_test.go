@@ -40,7 +40,10 @@ func TestBasicCommands(t *testing.T) {
 	if r := sh.Run("uname -a"); !strings.Contains(r.Output, sh.P.Kernel) {
 		t.Errorf("uname: %q", r.Output)
 	}
-	if r := sh.Run("nmap -sS 10.0.0.0/24"); r.Exit != 127 || !strings.Contains(r.Output, "command not found") || r.Argv0 != "nmap" {
+	if r := sh.Run("nmap -sS 10.0.0.0/24"); r.Exit != 127 || !strings.Contains(r.Output, "sudo apt install nmap") || r.Argv0 != "nmap" {
+		t.Errorf("not-installed tool: %+v", r)
+	}
+	if r := sh.Run("frobnicate --now"); r.Exit != 127 || !strings.Contains(r.Output, "command not found") {
 		t.Errorf("unknown: %+v", r)
 	}
 }
