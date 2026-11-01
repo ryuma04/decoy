@@ -9,3 +9,4 @@ $env:SENSOR_ADDR = "127.0.0.1:8443"
 $env:ANALYST_ADDR = "127.0.0.1:8090"
 $env:CORE_URL = "http://127.0.0.1:8443"
 & "$RootDir\backend\go\bin\core.exe" serve
+
