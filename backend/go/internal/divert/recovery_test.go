@@ -348,8 +348,10 @@ func TestCheckoutHold(t *testing.T) {
 	}
 	defer respContact.Body.Close()
 
-	if respContact.StatusCode != http.StatusServiceUnavailable {
-		t.Fatalf("expected 503 for contact, got %d", respContact.StatusCode)
+	// contact is replayable: recorded for delivery after release and answered like the real shop
+	cb, _ := io.ReadAll(respContact.Body)
+	if respContact.StatusCode != http.StatusOK || !strings.Contains(string(cb), `"success":true`) {
+		t.Fatalf("expected queued contact to answer 200 success, got %d %s", respContact.StatusCode, cb)
 	}
 }
 

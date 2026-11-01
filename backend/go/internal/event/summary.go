@@ -51,6 +51,14 @@ func Summary(typ string, d map[string]any) string {
 		out = fmt.Sprintf("uploaded %s (%s bytes)", s("path"), n("size"))
 	case "http.request":
 		out = strings.TrimSpace(fmt.Sprintf("%s %s → %s", s("method"), s("path"), n("status")))
+		switch {
+		case d["replay"] == true:
+			out += " (held request replayed on the real shop: " + s("outcome") + ")"
+		case d["queued"] == true:
+			out += " (held: will be delivered after release)"
+		case d["held"] == true:
+			out += " (held: visitor asked to try again)"
+		}
 	case "k8s.api_call":
 		out = strings.TrimSpace(fmt.Sprintf("k8s %s %s %s", s("verb"), s("resource"), s("namespace")))
 	case "token.used":
@@ -83,6 +91,9 @@ func Summary(typ string, d map[string]any) string {
 		}
 	case "session.released":
 		out = "visitor released back to the real site: " + s("reason")
+		if h := n("held_replayed"); h != "" && h != "0" {
+			out += ", " + h + " held request(s) being delivered"
+		}
 	default:
 		out = typ
 	}
