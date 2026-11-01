@@ -11,7 +11,7 @@ export async function GET(): Promise<Response> {
     fetch(`${proxyBase}/`, { method: "HEAD", cache: "no-store" })
       .then((r) => r.ok || r.status < 500)
       .catch(() => false),
-    fetch(`${coreBase}/v1/health`, { method: "GET", cache: "no-store" })
+    fetch(`${coreBase}/healthz`, { method: "GET", cache: "no-store" })
       .then((r) => r.ok)
       .catch(() => false),
   ]);
