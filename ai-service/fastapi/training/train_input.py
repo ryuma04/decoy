@@ -27,7 +27,7 @@ ROOT = os.path.normpath(os.path.join(os.path.dirname(os.path.abspath(__file__)),
 DATA = os.path.join(ROOT, "data", "processed", "inputs.csv")
 MODEL = os.path.join(ROOT, "models", "input.joblib")
 METRICS = os.path.join(ROOT, "reports", "input_metrics.json")
-VERSION = "v2"
+VERSION = "v2.1"
 
 
 def build() -> Pipeline:

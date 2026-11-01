@@ -207,6 +207,9 @@ def _attacker_ip(r):
 
 
 def _fill(text, r):
+    if "{cust}" in text:  # SQLi hidden after normal shop text, as it arrives in a contact / order-note field
+        text = text.replace("{cust}", r.choice([_order_ref(r), r.choice(S["cust_items"]), _customer_message(r)[:40],
+                                                r.choice(S["first_names"]), "Mom's cake"]))
     return (text.replace("{ip}", _attacker_ip(r)).replace("{b64}", r.choice(S["b64_blobs"]))
             .replace("{user}", r.choice(["admin", "root", "deploy", r.choice(S["first_names"]).lower()]))
             .replace("{evil}", r.choice(["evil.test", "attacker.example", _attacker_ip(r)])))

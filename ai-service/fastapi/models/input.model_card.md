@@ -1,4 +1,4 @@
-# Model card — input-risk model v2
+# Model card — input-risk model v2.1
 
 **What it does:** scores one attacker-typed value (form field, URL parameter, path, login username) from a decoy or the
 real-target login log. Output: `risk` 0–1 (= 1 − P(normal)) and a label
@@ -45,6 +45,28 @@ Values are URL-decoded twice and HTML-decoded once first; IPs, long numbers and 
 Remaining v2 errors on the hard set: `SELECT * menu specials` (normal, risk 0.60), `z; history | tail -5` (cmd injection,
 risk 0.42), `../../../home/deploy/.bash_history` (labelled cmd injection instead of path traversal). The v1 model is
 kept at `models/input.v1.joblib` for comparison.
+
+**v2 → v2.1** (SQL injection was the weakest class on unseen shapes): SQLi templates went from 3–12 to 9–21 per
+family, plus a new `sqli:in_text` family (payload after normal shop text, as it arrives in a form field), plus a few
+normal customer phrases starting with "or…". Measured with leave-one-family-out (`python -m training.lofo`: train
+without one SQLi family, test on it, for every family), which does not depend on the random hold-out:
+
+| Unseen SQLi family caught | v2 | v2.1 |
+| --- | --- | --- |
+| risk ≥ 0.5 (all families, weighted) | 78.1 % | **94.4 %** |
+| risk ≥ 0.8 (hard divert) | 58.9 % | **84.7 %** |
+| scored "normal" (missed) | 21.9 % | **5.6 %** |
+| worst family (union) | 50.9 % | 100 % |
+
+| Other tests | v2 | v2.1 |
+| --- | --- | --- |
+| Hard set, hold-out model: attacks @0.5 / normal FPR | 96.5 % / 2.5 % | 97.6 % / 0 % |
+| Hard set, final model: errors / macro F1 | 3 / 0.977 | 2 / 0.985 |
+| Customer set, final model: normal FPR / attacks @0.5 | 0 % / 100 % | 0 % / 100 % |
+
+Remaining hard-set errors: `SELECT * menu specials` (normal, 0.62 = soft at most), `..\..ppsettings.json`
+(path traversal, 0.49). Unseen XSS shapes (e.g. `<base href=…>`, `@import`) are the next weakest; the same recipe
+(more variety per family + lofo check with `--label xss`) applies. v2 is kept at `models/input.v2.joblib`.
 
 Latency p95 ≈ 1.5 ms per value on a laptop CPU.
 

