@@ -1,7 +1,7 @@
 # Stop all running Deception SOC processes
 Write-Host "Stopping Deception SOC processes..." -ForegroundColor Cyan
 
-$targets = @("core", "decoy-ssh", "decoy-web", "decoy-k8s", "decoy-beacon")
+$targets = @("core", "decoy-ssh", "decoy-web", "decoy-k8s", "decoy-beacon", "divert-proxy")
 foreach ($t in $targets) {
     Get-Process -Name $t -ErrorAction SilentlyContinue | ForEach-Object {
         Write-Host "  Stopping $($_.ProcessName) (PID $($_.Id))" -ForegroundColor Yellow

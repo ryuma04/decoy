@@ -80,7 +80,9 @@ const loginHTML = `<!DOCTYPE html>
   <title>{{.Company}} Internal Admin</title>
   <style>
     body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; background: #0f172a; color: #f8fafc; display: flex; align-items: center; justify-content: center; height: 100vh; margin: 0; }
-    .card { background: #1e293b; padding: 2rem; border-radius: 8px; width: 340px; box-shadow: 0 4px 6px rgba(0,0,0,0.3); border: 1px solid #334155; }
+    .card { position: relative; background: #1e293b; padding: 2rem; border-radius: 8px; width: 340px; box-shadow: 0 4px 6px rgba(0,0,0,0.3); border: 1px solid #334155; }
+    .star { position: absolute; top: 8px; right: 8px; font-size: 1.5rem; color: #ffdd00; }
+
     h2 { margin-top: 0; font-size: 1.25rem; color: #38bdf8; text-align: center; }
     .subtitle { font-size: 0.85rem; color: #94a3b8; text-align: center; margin-bottom: 1.5rem; }
     .error { background: #ef444420; border: 1px solid #ef4444; color: #fca5a5; padding: 0.5rem; border-radius: 4px; font-size: 0.85rem; margin-bottom: 1rem; }
