@@ -113,6 +113,7 @@ export interface IncidentDetail extends Incident {
   summary: string; summary_src: "template" | "llm"; narrative: Narrative | null; actor: ActorSummary; findings: Finding[];
   iocs: IOC[]; actions: ResponseAction[]; notes: { author: string; body: string; ts: string }[];
   recommended_actions: { action: string; target: string; why: string }[];
+  ip_status?: Record<string, string>;
 }
 
 export interface Honeytoken {
@@ -129,7 +130,7 @@ export interface MazeMessage { actor_id: string; node_id: string; state: "visibl
 export interface NarrativeMessage { kind: "actor" | "incident"; ref_id: string; narrative: Narrative; }
 export interface FeedbackResult { feedback_id: number; old_risk: number; new_risk: number; weights_version: number; }
 export interface ApiError { error: { code: string; message: string } }
-export type ResponseActionName = "block_ip" | "unblock_ip" | "kill_session" | "rotate_token";
+export type ResponseActionName = "block_ip" | "unblock_ip" | "divert_ip" | "release_ip" | "kill_session" | "rotate_token";
 
 // Divert proxy (09 §Recovery): IPs served from the honeypot clone, or released back to the real shop.
 export interface Diversion {

@@ -67,6 +67,7 @@ type incidentDetail struct {
 	Actions            []map[string]any    `json:"actions"`
 	Notes              []map[string]any    `json:"notes"`
 	RecommendedActions []recommended       `json:"recommended_actions"`
+	IPStatus           map[string]string   `json:"ip_status"`
 }
 
 func (s *Server) loadIncident(w http.ResponseWriter, r *http.Request) (store.IncidentRow, store.Actor, bool) {
@@ -88,17 +89,38 @@ func (s *Server) loadIncident(w http.ResponseWriter, r *http.Request) (store.Inc
 }
 
 // recommend maps findings to lab response actions (09 §Recommended actions).
-func recommend(findings []store.FindingRow, sum dto.ActorSummary, tokensUsed []string, sessions []store.SessionRow) []recommended {
+func recommend(findings []store.FindingRow, sum dto.ActorSummary, tokensUsed []string, sessions []store.SessionRow, pol store.Policy) []recommended {
 	out := []recommended{}
 	has := map[string]bool{}
 	for _, f := range findings {
 		has[f.RuleID] = true
 	}
+	blockedSet := map[string]bool{}
+	for _, b := range pol.BlockedIPs {
+		blockedSet[b] = true
+	}
+	divertedSet := map[string]bool{}
+	for _, d := range pol.DivertedIPs {
+		divertedSet[d] = true
+	}
+	releasedSet := map[string]bool{}
+	for _, r := range pol.ReleasedIPs {
+		releasedSet[r] = true
+	}
 	for _, ip := range sum.IPs {
 		if len(has) > 0 {
-			out = append(out, recommended{"block_ip", ip, "Stop further activity from this source on the decoys."})
-			out = append(out, recommended{"divert_ip", ip, "Serve this source the Aetees honeypot clone instead of the real shop (same URL)."})
-			out = append(out, recommended{"release_ip", ip, "False positive: send this visitor back to the real shop."})
+			if blockedSet[ip] {
+				out = append(out, recommended{"unblock_ip", ip, "Unblock this source IP and restore normal access on decoys."})
+				out = append(out, recommended{"release_ip", ip, "False positive: unblock and send this visitor back to the real shop."})
+			} else {
+				out = append(out, recommended{"block_ip", ip, "Stop further activity from this source on the decoys."})
+				if !divertedSet[ip] && !releasedSet[ip] {
+					out = append(out, recommended{"divert_ip", ip, "Serve this source the Aetees honeypot clone instead of the real shop (same URL)."})
+				}
+				if divertedSet[ip] {
+					out = append(out, recommended{"release_ip", ip, "False positive: unblock and send this visitor back to the real shop."})
+				}
+			}
 		}
 	}
 	for _, t := range tokensUsed {
@@ -144,7 +166,47 @@ func (s *Server) buildIncident(r *http.Request, row store.IncidentRow, a store.A
 			used = append(used, i.Value)
 		}
 	}
-	rec := recommend(findings, sum, used, sessions)
+	curPolicy, _ := s.DB.Policy(ctx)
+	blockedSet := map[string]bool{}
+	for _, b := range curPolicy.BlockedIPs {
+		blockedSet[b] = true
+	}
+	divertedSet := map[string]bool{}
+	for _, d := range curPolicy.DivertedIPs {
+		divertedSet[d] = true
+	}
+	releasedSet := map[string]bool{}
+	for _, r := range curPolicy.ReleasedIPs {
+		releasedSet[r] = true
+	}
+	ipStatus := map[string]string{}
+	for _, ip := range sum.IPs {
+		if blockedSet[ip] {
+			ipStatus[ip] = "blocked"
+		} else if releasedSet[ip] {
+			ipStatus[ip] = "released"
+		} else if divertedSet[ip] {
+			ipStatus[ip] = "diverted"
+		} else {
+			ipStatus[ip] = "normal"
+		}
+	}
+	for _, i := range iocs {
+		if i.Kind == "ip" {
+			if _, exists := ipStatus[i.Value]; !exists {
+				if blockedSet[i.Value] {
+					ipStatus[i.Value] = "blocked"
+				} else if releasedSet[i.Value] {
+					ipStatus[i.Value] = "released"
+				} else if divertedSet[i.Value] {
+					ipStatus[i.Value] = "diverted"
+				} else {
+					ipStatus[i.Value] = "normal"
+				}
+			}
+		}
+	}
+	rec := recommend(findings, sum, used, sessions, curPolicy)
 	f := s.facts(r, a, sum, findings, rec, row.IncidentID)
 	f.Tokens = used
 	var nar narrate.Narrative
@@ -155,7 +217,7 @@ func (s *Server) buildIncident(r *http.Request, row store.IncidentRow, a store.A
 	}
 	d := incidentDetail{Incident: incident.FromRow(row, a.Label, a.RiskScore), Summary: nar.Text, SummarySrc: nar.Source,
 		Narrative: &nar, Actor: sum, Findings: []dto.Finding{}, IOCs: []map[string]string{}, Actions: []map[string]any{},
-		Notes: []map[string]any{}, RecommendedActions: rec}
+		Notes: []map[string]any{}, RecommendedActions: rec, IPStatus: ipStatus}
 	for _, x := range findings {
 		d.Findings = append(d.Findings, dto.FromFinding(x))
 	}
@@ -241,9 +303,15 @@ func (s *Server) incidentAction(w http.ResponseWriter, r *http.Request) {
 	body.Target = strings.TrimSpace(body.Target)
 	switch body.Action {
 	case "block_ip", "unblock_ip", "divert_ip", "release_ip":
-		if net.ParseIP(body.Target) == nil {
+		pip := net.ParseIP(body.Target)
+		if pip == nil {
 			writeError(w, http.StatusBadRequest, "bad_request", "target must be an IP address")
 			return
+		}
+		if ip4 := pip.To4(); ip4 != nil {
+			body.Target = ip4.String()
+		} else {
+			body.Target = pip.String()
 		}
 	case "kill_session", "rotate_token":
 		if body.Target == "" || len(body.Target) > 200 {
@@ -431,10 +499,17 @@ func (s *Server) incidentFeedback(w http.ResponseWriter, r *http.Request) {
 		next.Version = v
 		newRisk = risk.Score(a.StageScores, next, risk.Facts{}).Risk
 	}
-	if body.AllowlistSource && y == 0 {
+	if y == 0 {
 		sum, _ := dto.Summary(ctx, s.DB, a)
 		for _, ip := range sum.IPs {
-			_ = s.DB.AddAllowlist(ctx, ip+"/32", "false positive on incident "+row.IncidentID, CurrentUser(r).UserID)
+			if body.AllowlistSource {
+				_ = s.DB.AddAllowlist(ctx, ip+"/32", "false positive on incident "+row.IncidentID, CurrentUser(r).UserID)
+			}
+			if act, err := s.DB.ApplyAction(ctx, row.IncidentID, "release_ip", ip, CurrentUser(r).UserID); err == nil {
+				out := map[string]any{"action_id": act.ActionID, "action": act.Action, "target": act.Target, "status": act.Status,
+					"requested_by": CurrentUser(r).Email, "ts": act.TS.UTC()}
+				s.Bus.Publish("incident", out)
+			}
 		}
 	}
 	if strings.TrimSpace(body.Note) != "" {
@@ -492,9 +567,15 @@ func (s *Server) diversionAction(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	body.IP = strings.TrimSpace(body.IP)
-	if net.ParseIP(body.IP) == nil {
+	pip := net.ParseIP(body.IP)
+	if pip == nil {
 		writeError(w, http.StatusBadRequest, "bad_request", "ip must be an IP address")
 		return
+	}
+	if ip4 := pip.To4(); ip4 != nil {
+		body.IP = ip4.String()
+	} else {
+		body.IP = pip.String()
 	}
 	if body.Action != "divert" && body.Action != "release" {
 		writeError(w, http.StatusBadRequest, "bad_request", "action must be divert or release")

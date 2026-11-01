@@ -216,18 +216,31 @@ func (s *Store) ApplyAction(ctx context.Context, incidentID, action, target, use
 		var q string
 		switch action {
 		case "block_ip":
+			if _, err := tx.Exec(ctx, `DELETE FROM policy WHERE kind = 'released_ip' AND value = $1`, target); err != nil {
+				return err
+			}
 			q = `INSERT INTO policy (kind, value, until) VALUES ('blocked_ip', $1, now() + interval '24 hours')
 				ON CONFLICT (kind, value) DO UPDATE SET until = EXCLUDED.until`
 		case "unblock_ip":
-			q = `DELETE FROM policy WHERE kind = 'blocked_ip' AND value = $1`
+			if _, err := tx.Exec(ctx, `DELETE FROM policy WHERE kind = 'blocked_ip' AND value = $1`, target); err != nil {
+				return err
+			}
+			if _, err := tx.Exec(ctx, `DELETE FROM policy WHERE kind = 'diverted_ip' AND value = $1`, target); err != nil {
+				return err
+			}
+			q = `INSERT INTO policy (kind, value, until) VALUES ('released_ip', $1, now() + interval '24 hours')
+				ON CONFLICT (kind, value) DO UPDATE SET until = EXCLUDED.until`
 		case "divert_ip": // divert proxy serves this IP from the honeypot clone; clears an earlier release
 			if _, err := tx.Exec(ctx, `DELETE FROM policy WHERE kind = 'released_ip' AND value = $1`, target); err != nil {
 				return err
 			}
 			q = `INSERT INTO policy (kind, value, until) VALUES ('diverted_ip', $1, now() + interval '24 hours')
 				ON CONFLICT (kind, value) DO UPDATE SET until = EXCLUDED.until`
-		case "release_ip": // false positive: back to the real site, and the proxy will not divert it again on weak signals
+		case "release_ip": // false positive: unblock from decoys and divert proxy, release to real site
 			if _, err := tx.Exec(ctx, `DELETE FROM policy WHERE kind = 'diverted_ip' AND value = $1`, target); err != nil {
+				return err
+			}
+			if _, err := tx.Exec(ctx, `DELETE FROM policy WHERE kind = 'blocked_ip' AND value = $1`, target); err != nil {
 				return err
 			}
 			q = `INSERT INTO policy (kind, value, until) VALUES ('released_ip', $1, now() + interval '24 hours')

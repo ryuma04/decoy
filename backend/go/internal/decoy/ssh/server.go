@@ -255,6 +255,11 @@ func getOrCreateState(kit *sensorkit.Kit, remoteAddr net.Addr, dstPort int) *con
 		return st
 	}
 	host, portStr, _ := net.SplitHostPort(key)
+	if parsed := net.ParseIP(host); parsed != nil {
+		if ip4 := parsed.To4(); ip4 != nil {
+			host = ip4.String()
+		}
+	}
 	port := 0
 	fmt.Sscanf(portStr, "%d", &port)
 	sess := kit.NewSession(host, port, dstPort)
@@ -379,10 +384,15 @@ func (s *Server) handleConn(rawConn net.Conn) {
 	defer rawConn.Close()
 
 	host, _, _ := net.SplitHostPort(remoteAddr)
+	if parsed := net.ParseIP(host); parsed != nil {
+		if ip4 := parsed.To4(); ip4 != nil {
+			host = ip4.String()
+		}
+	}
 
 	// Refuse blocked IPs immediately (TCP close, docs/04 §A Policy).
 	if s.cfg.Kit.Blocked(host) {
-		slog.Debug("blocked IP, closing connection", "ip", host)
+		slog.Info("refusing connection from blocked IP", "ip", host)
 		return
 	}
 
@@ -1234,9 +1244,35 @@ func (s *Server) proxyToSandbox(ch ssh.Channel, reqs <-chan *ssh.Request, st *co
 		_, _ = io.Copy(ch.Stderr(), sStderr)
 	}()
 
+	closeReason := "clean"
+	killDone := make(chan struct{})
+	defer close(killDone)
+
+	go func() {
+		ticker := time.NewTicker(500 * time.Millisecond)
+		defer ticker.Stop()
+		for {
+			select {
+			case <-killDone:
+				return
+			case <-ticker.C:
+				if s.cfg.Kit != nil && (s.cfg.Kit.Blocked(host) || s.cfg.Kit.Killed(st.session.ID)) {
+					closeReason = "killed"
+					slog.Info("closing proxied session due to policy block/kill", "ip", host, "session", st.session.ID)
+					_, _ = ch.Write([]byte("\r\nConnection closed by foreign host.\r\n"))
+					_ = cSession.Close()
+					_ = cClient.Close()
+					_ = conn.Close()
+					_ = ch.Close()
+					return
+				}
+			}
+		}
+	}()
+
 	_ = cSession.Wait()
 	wg.Wait()
 
-	st.emitClose(int(time.Since(connStart).Milliseconds()), cconn.bytesIn.Load(), cconn.bytesOut.Load(), "clean")
+	st.emitClose(int(time.Since(connStart).Milliseconds()), cconn.bytesIn.Load(), cconn.bytesOut.Load(), closeReason)
 	return true
 }

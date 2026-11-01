@@ -84,11 +84,10 @@ export default function IncidentDetailPage() {
     if (!incident || !pendingAction) return;
     setActionLoading(true);
     try {
-      const res = await api.takeAction(incident.incident_id, pendingAction.action, pendingAction.target);
-      setIncident({
-        ...incident,
-        actions: [res, ...incident.actions],
-      });
+      await api.takeAction(incident.incident_id, pendingAction.action, pendingAction.target);
+      // Immediately re-fetch full incident so recommendations, IOC badges, and audit history update
+      const refreshed = await api.getIncident(incident.incident_id);
+      setIncident(refreshed);
     } catch (err) {
       alert("Failed to apply action: " + String(err));
     } finally {
@@ -106,6 +105,11 @@ export default function IncidentDetailPage() {
         allowlist_source: allowlistSource,
       });
       setFeedbackToast(res);
+      // Re-fetch incident details so newly applied release/unblock actions reflect immediately
+      try {
+        const refreshed = await api.getIncident(incident.incident_id);
+        setIncident(refreshed);
+      } catch {}
       setTimeout(() => setFeedbackToast(null), 8000);
     } catch (err) {
       alert("Failed to submit feedback: " + String(err));
@@ -356,23 +360,75 @@ export default function IncidentDetailPage() {
           </div>
 
           <div className="mt-3 divide-y divide-hairline">
-            {incident.iocs.map((ioc, idx) => (
-              <div key={idx} className="py-2.5 flex items-center justify-between gap-3 text-[12px] font-mono">
-                <span className="uppercase text-mute font-medium text-[11px] w-20 shrink-0">
-                  {ioc.kind}
-                </span>
-                <span className="font-semibold text-ink truncate max-w-[320px] bg-canvas px-2 py-0.5 rounded border border-hairline">
-                  {ioc.value}
-                </span>
-                <button
-                  onClick={() => copyToClipboard(ioc.value)}
-                  className="p-1.5 text-mute hover:text-ink rounded hover:bg-canvas"
-                  title="Copy IOC"
-                >
-                  {copiedIoc === ioc.value ? <Check className="h-3.5 w-3.5 text-emerald-600" /> : <Copy className="h-3.5 w-3.5" />}
-                </button>
-              </div>
-            ))}
+            {incident.iocs.map((ioc, idx) => {
+              const isIP = ioc.kind === "ip";
+              // Live policy status from core API (backed by PostgreSQL policy table)
+              const liveStatus = incident.ip_status?.[ioc.value];
+              // Audit log fallback sorted by latest timestamp
+              const latestAction = [...incident.actions]
+                .filter((a) => a.target === ioc.value)
+                .sort((a, b) => new Date(b.ts).getTime() - new Date(a.ts).getTime())[0];
+              const isBlocked = isIP && (liveStatus ? liveStatus === "blocked" : latestAction?.action === "block_ip");
+              const isReleased = isIP && (liveStatus ? liveStatus === "released" : (latestAction?.action === "unblock_ip" || latestAction?.action === "release_ip"));
+              const isDiverted = isIP && (liveStatus === "diverted" || (!liveStatus && latestAction?.action === "divert_ip"));
+              return (
+                <div key={idx} className="py-2.5 flex items-center justify-between gap-3 text-[12px] font-mono">
+                  <span className="uppercase text-mute font-medium text-[11px] w-20 shrink-0">
+                    {ioc.kind}
+                  </span>
+                  <span className="font-semibold text-ink truncate max-w-[280px] bg-canvas px-2 py-0.5 rounded border border-hairline flex items-center gap-2">
+                    {ioc.value}
+                    {isBlocked && (
+                      <span className="rounded bg-red-100 text-red-800 text-[10px] font-bold px-1.5 py-0.2 border border-red-200">
+                        BLOCKED
+                      </span>
+                    )}
+                    {isReleased && (
+                      <span className="rounded bg-emerald-100 text-emerald-800 text-[10px] font-bold px-1.5 py-0.2 border border-emerald-200">
+                        ALLOWED
+                      </span>
+                    )}
+                    {isDiverted && (
+                      <span className="rounded bg-amber-100 text-amber-800 text-[10px] font-bold px-1.5 py-0.2 border border-amber-200">
+                        DIVERTED
+                      </span>
+                    )}
+                  </span>
+                  <div className="flex items-center gap-1.5">
+                    {isIP && (
+                      isBlocked ? (
+                        <button
+                          onClick={() => {
+                            setPendingAction({ action: "unblock_ip", target: ioc.value, why: "Unblock IP and restore access" });
+                            setConfirmOpen(true);
+                          }}
+                          className="btn text-[11px] h-7 px-2 border-hairline hover:bg-emerald-50 hover:text-emerald-700 font-semibold"
+                        >
+                          Unblock
+                        </button>
+                      ) : (
+                        <button
+                          onClick={() => {
+                            setPendingAction({ action: "block_ip", target: ioc.value, why: "Block IP on decoys" });
+                            setConfirmOpen(true);
+                          }}
+                          className="btn text-[11px] h-7 px-2 border-hairline hover:bg-red-50 hover:text-red-700 font-semibold"
+                        >
+                          Block
+                        </button>
+                      )
+                    )}
+                    <button
+                      onClick={() => copyToClipboard(ioc.value)}
+                      className="p-1.5 text-mute hover:text-ink rounded hover:bg-canvas"
+                      title="Copy IOC"
+                    >
+                      {copiedIoc === ioc.value ? <Check className="h-3.5 w-3.5 text-emerald-600" /> : <Copy className="h-3.5 w-3.5" />}
+                    </button>
+                  </div>
+                </div>
+              );
+            })}
           </div>
         </div>
 
@@ -392,22 +448,39 @@ export default function IncidentDetailPage() {
                 No defensive actions taken yet.
               </p>
             ) : (
-              incident.actions.map((act) => (
-                <div key={act.action_id} className="p-3 rounded-lg border border-hairline bg-canvas flex items-center justify-between text-[12px]">
-                  <div>
-                    <div className="flex items-center gap-2">
-                      <span className="font-mono font-bold text-ink uppercase">{act.action}</span>
-                      <span className="font-mono text-link">{act.target}</span>
-                      <span className="rounded bg-emerald-50 text-emerald-800 text-[10px] font-mono font-bold px-1.5 py-0.2 border border-emerald-200">
-                        {act.status}
+              incident.actions.map((act) => {
+                const isBlockAct = act.action === "block_ip";
+                const isCurrentlyBlocked = isBlockAct && !incident.actions.some(
+                  (a) => a.target === act.target && (a.action === "unblock_ip" || a.action === "release_ip") && new Date(a.ts) > new Date(act.ts)
+                );
+                return (
+                  <div key={act.action_id} className="p-3 rounded-lg border border-hairline bg-canvas flex items-center justify-between text-[12px]">
+                    <div>
+                      <div className="flex items-center gap-2">
+                        <span className="font-mono font-bold text-ink uppercase">{act.action.replace(/_/g, " ")}</span>
+                        <span className="font-mono text-link">{act.target}</span>
+                        <span className="rounded bg-emerald-50 text-emerald-800 text-[10px] font-mono font-bold px-1.5 py-0.2 border border-emerald-200">
+                          {act.status}
+                        </span>
+                      </div>
+                      <span className="text-mute text-[11px] font-mono">
+                        By {act.requested_by} · {istTime(act.ts)}
                       </span>
                     </div>
-                    <span className="text-mute text-[11px] font-mono">
-                      By {act.requested_by} · {istTime(act.ts)}
-                    </span>
+                    {isCurrentlyBlocked && (
+                      <button
+                        onClick={() => {
+                          setPendingAction({ action: "unblock_ip", target: act.target, why: "Unblock previously blocked IP" });
+                          setConfirmOpen(true);
+                        }}
+                        className="btn text-[11px] h-7 px-2.5 border-hairline hover:bg-emerald-50 hover:text-emerald-700 font-mono font-bold"
+                      >
+                        Unblock IP
+                      </button>
+                    )}
                   </div>
-                </div>
-              ))
+                );
+              })
             )}
           </div>
         </div>
@@ -449,10 +522,14 @@ export default function IncidentDetailPage() {
       <ConfirmDialog
         open={confirmOpen}
         onOpenChange={setConfirmOpen}
-        title={`Confirm Action: ${pendingAction?.action.toUpperCase()}`}
-        description={`Are you sure you want to execute ${pendingAction?.action} on target "${pendingAction?.target}"? This will modify the lab decoy network and core routing policy.`}
-        confirmLabel="Execute Lab Action"
-        danger={true}
+        title={`Confirm Action: ${pendingAction?.action.replace(/_/g, " ").toUpperCase()}`}
+        description={
+          pendingAction?.action === "unblock_ip" || pendingAction?.action === "release_ip"
+            ? `Are you sure you want to unblock target "${pendingAction?.target}"? This will remove the block and restore access across all decoys.`
+            : `Are you sure you want to execute ${pendingAction?.action.replace(/_/g, " ")} on target "${pendingAction?.target}"? This will modify the lab decoy network and core routing policy.`
+        }
+        confirmLabel={pendingAction?.action === "unblock_ip" || pendingAction?.action === "release_ip" ? "Unblock IP" : "Execute Lab Action"}
+        danger={pendingAction?.action !== "unblock_ip" && pendingAction?.action !== "release_ip"}
         loading={actionLoading}
         onConfirm={executeAction}
       />

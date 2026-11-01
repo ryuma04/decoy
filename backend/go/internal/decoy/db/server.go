@@ -417,6 +417,9 @@ func splitAddr(a net.Addr) (string, int) {
 		if ip == "::1" {
 			ip = "127.0.0.1"
 		}
+		if ip4 := t.IP.To4(); ip4 != nil {
+			ip = ip4.String()
+		}
 		return ip, t.Port
 	}
 	return "127.0.0.1", 0

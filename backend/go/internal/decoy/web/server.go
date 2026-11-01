@@ -259,6 +259,11 @@ func (s *Server) extractClient(r *http.Request) (string, int) {
 	if host == "::1" || host == "" {
 		host = "127.0.0.1"
 	}
+	if parsed := net.ParseIP(host); parsed != nil {
+		if ip4 := parsed.To4(); ip4 != nil {
+			host = ip4.String()
+		}
+	}
 	port := 0
 	fmt.Sscanf(portStr, "%d", &port)
 	return host, port

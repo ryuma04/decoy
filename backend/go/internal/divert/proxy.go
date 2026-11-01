@@ -757,6 +757,11 @@ func parseRemoteAddr(addr string) (string, int) {
 	if host == "::1" { // same machine over IPv6: one identity, so dashboard policy for 127.0.0.1 applies
 		host = "127.0.0.1"
 	}
+	if parsed := net.ParseIP(host); parsed != nil {
+		if ip4 := parsed.To4(); ip4 != nil {
+			host = ip4.String()
+		}
+	}
 	port := 0
 	_, _ = fmt.Sscanf(portStr, "%d", &port)
 	return host, port

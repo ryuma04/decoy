@@ -85,7 +85,7 @@ func TestDeliverSpoolReplayAndPolicy(t *testing.T) {
 	defer cancel()
 	kit.Start(ctx)
 
-	if !kit.Blocked("10.66.0.99") || !kit.Burned("tok_aws_k7") || kit.Blocked("10.66.0.1") {
+	if !kit.Blocked("10.66.0.99") || !kit.Blocked("::ffff:10.66.0.99") || !kit.Burned("tok_aws_k7") || kit.Blocked("10.66.0.1") {
 		t.Fatal("policy not loaded at start")
 	}
 

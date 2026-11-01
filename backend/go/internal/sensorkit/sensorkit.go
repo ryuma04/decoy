@@ -14,11 +14,13 @@ import (
 	"fmt"
 	"io"
 	"log/slog"
+	"net"
 	"net/http"
 	"os"
 	"path/filepath"
 	"sync"
 	"sync/atomic"
+	"strings"
 	"time"
 
 	"github.com/ryuma04/decoy/backend/internal/event"
@@ -30,7 +32,7 @@ const (
 	flushEvery      = time.Second
 	queueSize       = 10000
 	heartbeatTick   = 30 * time.Second
-	policyTick      = 5 * time.Second
+	policyTick      = 1 * time.Second
 	mazeViewTimeout = 1500 * time.Millisecond
 	spoolMaxBytes   = 50 << 20
 )
@@ -168,11 +170,33 @@ func (k *Kit) Policy() Policy {
 	return k.policy
 }
 
-func (k *Kit) Blocked(ip string) bool       { return k.Policy().blocked[ip] }
+func cleanIP(s string) string {
+	s = strings.TrimSpace(s)
+	if s == "" {
+		return ""
+	}
+	ip := net.ParseIP(s)
+	if ip == nil {
+		return s
+	}
+	if ip4 := ip.To4(); ip4 != nil {
+		return ip4.String()
+	}
+	return ip.String()
+}
+
+func (k *Kit) Blocked(ip string) bool {
+	pol := k.Policy()
+	clean := cleanIP(ip)
+	if pol.released[clean] {
+		return false
+	}
+	return pol.blocked[clean]
+}
 func (k *Kit) Killed(sessionID string) bool { return k.Policy().killed[sessionID] }
 func (k *Kit) Burned(tokenID string) bool   { return k.Policy().burned[tokenID] }
-func (k *Kit) Diverted(ip string) bool      { return k.Policy().diverted[ip] }
-func (k *Kit) Released(ip string) bool      { return k.Policy().released[ip] }
+func (k *Kit) Diverted(ip string) bool      { return k.Policy().diverted[cleanIP(ip)] }
+func (k *Kit) Released(ip string) bool      { return k.Policy().released[cleanIP(ip)] }
 
 func (k *Kit) PollPolicy(ctx context.Context) { k.pollPolicy(ctx) }
 
@@ -182,8 +206,8 @@ func (k *Kit) pollPolicy(ctx context.Context) {
 		slog.Debug("policy poll failed; keeping last policy", "err", err)
 		return
 	}
-	p.blocked, p.killed, p.burned = toSet(p.BlockedIPs), toSet(p.KilledSessions), toSet(p.BurnedTokens)
-	p.diverted, p.released = toSet(p.DivertedIPs), toSet(p.ReleasedIPs)
+	p.blocked, p.killed, p.burned = toIPSet(p.BlockedIPs), toSet(p.KilledSessions), toSet(p.BurnedTokens)
+	p.diverted, p.released = toIPSet(p.DivertedIPs), toIPSet(p.ReleasedIPs)
 	k.policyMu.Lock()
 	if p.Rev != k.policy.Rev {
 		slog.Info("policy updated", "rev", p.Rev, "blocked", len(p.BlockedIPs), "killed", len(p.KilledSessions))
@@ -196,6 +220,14 @@ func toSet(xs []string) map[string]bool {
 	m := make(map[string]bool, len(xs))
 	for _, x := range xs {
 		m[x] = true
+	}
+	return m
+}
+
+func toIPSet(xs []string) map[string]bool {
+	m := make(map[string]bool, len(xs))
+	for _, x := range xs {
+		m[cleanIP(x)] = true
 	}
 	return m
 }

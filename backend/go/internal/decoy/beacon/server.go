@@ -342,6 +342,14 @@ func parseRemoteAddr(remoteAddr string) (string, int) {
 	if err != nil {
 		return remoteAddr, 0
 	}
+	if host == "::1" {
+		host = "127.0.0.1"
+	}
+	if parsed := net.ParseIP(host); parsed != nil {
+		if ip4 := parsed.To4(); ip4 != nil {
+			host = ip4.String()
+		}
+	}
 	port, _ := strconv.Atoi(portStr)
 	return host, port
 }

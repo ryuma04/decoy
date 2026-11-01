@@ -1,21 +1,20 @@
 #!/usr/bin/env bash
 # ============================================================================
 # scripts/attack-admin-breadcrumbs.sh
-#   Admin-subdomain "exposed breadcrumb" showcase (Deception SOC lab)
+#   Admin-subdomain breadcrumb showcase — from an attacker's perspective
 #
-#   What this script does:
-#     1. Pings the ADMIN honeypot subdomain (the website address, NOT localhost)
-#        and follows it into the honeypot clone.
-#     2. Shows the breadcrumb HTML comments the clone injects into every page.
-#     3. Shows the decoy paths the breadcrumb points to (/.env.bak, /backup/).
-#     4. Shows the simulated-but-real-looking "sensitive" files exposed there.
-#     5. Shows the redirect behaviour (clone vs real shop) and the login endpoint.
-#     6. Reads the SOC events API to show what was recorded.
+#   What this script does (from an attacker's POV):
+#     1. Lands on the admin subdomain of aeteesbakehouse.com and follows the redirect
+#        into the honeypot clone (the clone, not the real shop).
+#     2. Strips the injected breadcrumb comment off the clone's login page.
+#     3. Follows the breadcrumb trail to /.env.bak and /backup/ and grabs the
+#        simulated-but-real-looking "sensitive" files.
+#     4. Sends a login request and sees the clone reject it (clone never touches the
+#        real shop; the real admin_token stays with staff).
+#     5. Reads the SOC analyst API to see the alerts queued against you.
 #
-#   Frame: viewer exploring the honeypot, not an attack.
-#     Everything here is read-only probing of your own admin subdomain.
 #   Target: https://aeteesadmin.aeteesbakehouse.com
-#   LAB USE ONLY. Nothing here touches anything outside this lab.
+#   LAB USE ONLY — your own domain/lab. Nothing here touches anything outside it.
 # ============================================================================
 set -euo pipefail
 
@@ -36,10 +35,10 @@ NC=$'\033[0m'
 WORK="$(mktemp -d)"
 trap 'rm -rf "$WORK"' EXIT
 pass=0; fail=0
-ok()   { echo -e "${GREEN}  [PASS]${NC} $1"; pass=$((pass+1)); }
-bad()  { echo -e "${RED}  [FAIL]${NC} $1"; fail=$((fail+1)); }
+ok()   { echo -e "${GREEN}  [TARGET ACCOMPLISHED]${NC} $1"; pass=$((pass+1)); }
+bad()  { echo -e "${RED}  [EVADED]${NC} $1"; fail=$((fail+1)); }
 note() { echo -e "${YELLOW}  • $1${NC}"; }
-step() { echo -e "\n${BLUE}── $1${NC}"; }
+step() { echo -e "\n${BLUE}── ${1}${NC}"; }
 
 log() { echo "[$(date -u +'%Y-%m-%dT%H:%M:%SZ')] $*" >> "$LOG_DIR/evidence.log"; }
 
@@ -47,27 +46,22 @@ hdr() {
   echo -e "${CYAN}"
   echo "======================================================================"
   echo "  Deception SOC Lab — Admin Subdomain Breadcrumb Showcase"
-  echo "  Target : ${TARGET}"
-  echo "  Domain : ${ADMIN_DOMAIN}"
-  echo "  Frame  : visitor exploring the admin honeypot (clone), not an attack"
-  echo "  Mode   : ADMIN_HONEYPOT (always-live clone, no real data sent to real shop)"
+  echo "  You came in through the admin subdomain (the website address)."
+  echo "  Target: ${TARGET}"
+  echo "  Mode : ADMIN_HONEYPOT — clone served; real shop never reached"
   echo "======================================================================"
   echo -e "${NC}"
 }
 
-# HTTP helper: fetch a path on the target, print status + save body + count.
-#   $1 = path, $2 = output file
-# Times out the on-the-domain curl against the Cloudflare tunnel and falls back
-# to the direct divert proxy (with the admin Host header) when the tunnel drops
-# the hostname — keeps the showcase working regardless.
+# HTTP helper: fetch a path on the target, print status + save body.
+# Tries the on-the-website domain first; falls back to the divert proxy
+# (admin Host header) when the tunnel drops the hostname.
 http_fetch() {
   local path="$1" out="$2" code
   code=$(curl -s -o "$out" -w "%{http_code}" --max-time 8 -A \
     "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36" \
     "$TARGET$path" 2>/dev/null) || true
   if [ "$code" = "000" ]; then
-    # Domain unreachable (Cloudflare tunnel dropped the hostname); retry via the
-    # direct proxy so the showcase still runs.
     code=$(curl -s -o "$out" -w "%{http_code}" --max-time 8 -A \
       "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36" \
       -H "Host: $ADMIN_DOMAIN" \
@@ -76,12 +70,11 @@ http_fetch() {
   echo "$code"
 }
 
-# analyst_login: authenticate to the local analyst API and return a cookie jar path.
-# Sets: CJ (cookie jar path)
+# analyst_login: authenticate to the local analyst API and set CJ (cookie jar).
 analyst_login() {
   CJ="$WORK/analyst.cookies"
   if [ -z "${SOC_ADMIN_EMAIL:-}" ] || [ -z "${SOC_ADMIN_PASSWORD:-}" ]; then
-    note "  (SOC admin credentials not set in .env — skipping SOC events read.)"
+    note "  (SOC admin credentials not set in .env — skipping SOC read.)"
     return 1
   fi
   curl -s -c "$CJ" -o /dev/null --max-time 20 \
@@ -93,32 +86,34 @@ analyst_login() {
 # ── Header ──────────────────────────────────────────────────────────────────
 hdr
 
-# Step 1 — Reach the honeypot clone via the website address
-step "1. Reaching the admin honeypot (clone) via the website address"
-note "GET ${TARGET}/  (expect 307 -> /login, the clone admin portal)"
+# Step 1 — Land on the admin subdomain: clone detected
+step "1. Land on the admin subdomain — clone, not the real shop"
+note "GET ${TARGET}/  (first request lands here)"
 code=$(http_fetch "/" "$WORK/root.html")
-if [ "$code" = "307" ]; then ok "root redirects to /login (clone admin portal, not real shop)"; else bad "root returned ${code} (expected 307)"; fi
+if [ "$code" = "307" ]; then ok "you're redirected to /login (clone admin portal)"; else bad "root returned ${code} (expected 307)"; fi
 note "  Location: $(grep -o 'Location: [^ ]*' "$WORK/root.html" | head -1 || true)"
+note "  The site you reached is the clone — the real shop never serves anyone here."
 
-note "GET ${TARGET}/admin/login  (clone admin login page)"
+note "GET ${TARGET}/admin/login  (the admin login page)"
 code=$(http_fetch "/admin/login" "$WORK/admin_login.html")
 if [ "$code" = "200" ]; then ok "/admin/login returns 200 (clone login page)"; else bad "/admin/login returned ${code}"; fi
 
-# Step 2 — The exposed breadcrumb
-step "2. Exposed breadcrumbs in clone HTML pages"
-note "Every clone page carries an injected anchoring comment."
+# Step 2 — Strip the breadcrumb comment off the clone page
+step "2. Strip the breadcrumb comment off the clone page"
+note "Every clone page carries a hidden anchoring comment — a breadcrumb for you to follow."
 breadcrumb=$(grep -oi "<!-- DEBUG: [^>]*-->" "$WORK/admin_login.html" 2>/dev/null | head -1)
 if [ -n "$breadcrumb" ]; then
-  ok "breadcrumb comment found in clone page"
+  ok "breadcrumb comment found in the clone page"
   note "  <$breadcrumb>"
+  note "  The clone is pointing you at two paths: /.env.bak and /backup/"
 else
-  bad "no breadcrumb comment found in clone page"
+  bad "no breadcrumb comment found"
 fi
 log "breadcrumb_comment=$(echo "$breadcrumb" | tr -d '\n')"
 
-# Step 3 — The decoy paths the breadcrumb points to
-step "3. Decoy paths the breadcrumb points to"
-note "  Breadcrumb text: 'Remove /.env.bak and /backup/'"
+# Step 3 — Follow the breadcrumb: grab the fake sensitive files
+step "3. Follow the breadcrumb — grab the sensitive-looking files"
+note "Bad path 1: /.env.bak"
 code=$(http_fetch "/.env.bak" "$WORK/envbak")
 if [ "$code" = "200" ]; then
   ok "GET /.env.bak -> 200 (simulated environment file)"
@@ -129,7 +124,7 @@ else
   bad "GET /.env.bak returned ${code}"
 fi
 
-note "GET /backup/ (directory listing)"
+note "Bad path 2: /backup/"
 code=$(http_fetch "/backup/" "$WORK/backup_dir.html")
 if [ "$code" = "200" ]; then
   ok "GET /backup/ -> 200 (directory listing)"
@@ -139,13 +134,13 @@ else
   bad "GET /backup/ returned ${code}"
 fi
 
-note "GET /admin/backup/ (trailing-slash redirect)"
+note "Trailing-slash redirect: /admin/backup/"
 code=$(http_fetch "/admin/backup/" "$WORK/ab.html")
 if [ "$code" = "308" ]; then ok "GET /admin/backup/ -> 308 (redirect to /admin/backup)"; else bad "GET /admin/backup/ returned ${code}"; fi
 
-# Step 4 — Login endpoint behaviour
-step "4. Login endpoint behaviour on the admin clone"
-note "POST /admin/login (credentials sent to the clone)"
+# Step 4 — Try the login: the clone rejects credentials
+step "4. Try the login — the clone rejects it"
+note "POST /admin/login with a set of credentials"
 code=$(curl -s -o "$WORK/login_resp.html" -w "%{http_code}" --max-time 8 \
   -X POST -H "Content-Type: application/json" \
   -d '{"username":"admin","password":"DefinitelyWrong123!"}' \
@@ -157,41 +152,41 @@ if [ "$code" = "000" ]; then
     -H "Host: $ADMIN_DOMAIN" \
     http://127.0.0.1:8200/admin/login 2>/dev/null) || true
 fi
-if [ "$code" = "405" ]; then ok "POST /admin/login -> 405 (endpoint does not accept credentials on the clone)"; else bad "POST /admin/login returned ${code}"; fi
-note "  (The clone does not accept credentials; the real shop is never involved.)"
+if [ "$code" = "405" ]; then ok "POST /admin/login -> 405 (clone never accepts credentials)"; else bad "POST /admin/login returned ${code}"; fi
+note "  The clone doesn't touch the real shop — staff logins (real admin_token) still work there."
 
-# Step 5 — What the SOC recorded
-step "5. SOC events recorded during this run"
-note "Logging into the analyst API to read recorded events."
+# Step 5 — The SOC logs you
+step "5. What the SOC logs against you"
+note "Logging into the analyst API to read the alerts queued against you."
 if analyst_login; then
   note "  Analyst login OK — reading session.diverted events."
   events=$(curl -s --max-time 8 -b "$CJ" "http://127.0.0.1:8090/v1/events?type=session.diverted&limit=100" 2>/dev/null || true)
   if echo "$events" | grep -q '"items"'; then
     count=$(echo "$events" | python3 -c "import json,sys;print(len(json.load(sys.stdin).get('items',[])))" 2>/dev/null || echo "?")
-    note "  Sessions diverted / events recorded: ${count}"
+    note "  Events diverted / recorded: ${count}"
     reasons=$(echo "$events" | python3 -c "
 import json,sys
 d=json.load(sys.stdin)
 for i in d.get('items',[])[-5:]:
     print('    -', i.get('data',{}).get('reason','?'))
 " 2>/dev/null)
-    note "  Recent divert reasons:"; echo "$reasons" | sed 's/^/    /'
+    note "  Latest divert reasons:"; echo "$reasons" | sed 's/^/    /'
     log "events_recorded=$count"
   else
-    note "  (No session.diverted events yet — the requests above will start recording.)"
+    note "  (No session.diverted events yet — the requests above start recording.)"
   fi
 else
   note "  (Analyst API not reachable — check dev-up.sh and .env credentials.)"
 fi
 
 # Summary
-echo -e "\n${CYAN}------------------------------------------------------------------------${NC}"
-echo -e "${GREEN}  Showcase complete: ${pass} passed, ${fail} failed${NC}"
-echo -e "${CYAN}------------------------------------------------------------------------${NC}"
-note "  What is exposed on the admin honeypot subdomain:"
+echo -e "\n${CYAN}----------------------------------------------------------------------${NC}"
+echo -e "${GREEN}  Showcase complete: ${pass} target accomplished, ${fail} evaded${NC}"
+echo -e "${CYAN}----------------------------------------------------------------------${NC}"
+note "  What you'd see on the admin subdomain:"
 note "    - Clone HTML pages carry a breadcrumb comment pointing to /.env.bak + /backup/"
-note "    - Simulated .env           : /.env.bak  (ADMIN_PASSWORD=BakeI836pTQEYt!)"
-note "    - Simulated backup dir     : /backup/   (schema_2026.sql, aetees_db_FINAL.sql.gz)"
-note "    - Login endpoint rejects   : POST /admin/login -> 405 (stays in clone)"
+note "    - Fake prod env     : /.env.bak  (ADMIN_PASSWORD=BakeI836pTQEYt!)"
+note "    - Fake backup dir   : /backup/   (schema_2026.sql, aetees_db_FINAL.sql.gz)"
+note "    - Login is rejected : POST /admin/login -> 405 (clone never touches the real shop)"
 note "  Real shop is NEVER touched — the clone is served for every admin-subdomain visitor."
 exit $fail
